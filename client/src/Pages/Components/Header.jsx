@@ -2,10 +2,9 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { FiMenu, FiX } from "react-icons/fi"; // for hamburger icons
 
-export function Header() {
+export function Header({isLogged , setIsLogged}) {
   const navigate = useNavigate();
   const location = useLocation();
-  const [isLogged, setIsLogged] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {

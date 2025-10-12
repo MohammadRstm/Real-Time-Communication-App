@@ -18,12 +18,20 @@ const io = new Server(server, {
   }
 });
 
+app.set("io" , io);// set io for future usage 
+
 // get routers
 const userRouter = require("./routes/usersRoute");
 
 // communication handlers
 io.on("connection", socket => {
-  console.log("User connected:", socket.id);
+  // console.log("User connected:", socket.id);
+
+  const { userId } = socket.handshake.query;
+  if (userId) {
+    socket.join(userId); // user joins their personal room
+    console.log(`User ${userId} joined their personal room`);
+  }
 
   // When a user joins a room
   socket.on("join-room", roomId => {
