@@ -174,6 +174,29 @@ router.post('/rejectFriendRequest/:request_id', authenticateToken, async(req, re
     }
 });
 
+// GET ALL FRIEDS FOR A USER
+router.get('/friends' , authenticateToken , async (req , res) =>{
+    try{
+        const currentUser = req.user;
+        const user = await User.findById(currentUser.id).select('friends').populate(
+            {
+                path: 'friends',
+                select : 'fullName email _id'
+            }
+        );
+
+        if(!user || !user.friends || user.friends.length === 0)
+            return res.json([]);
+
+        return res.json(user.friends);
+    }catch(err){
+        console.error(err);
+        res.status(500).json({message: 'Server error'});
+    }
+});
+
+
+
 
 
 

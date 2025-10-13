@@ -98,9 +98,6 @@ export function Dashboard() {
     }
   };
 
-  const createRoom = () => {
-    window.location.href = `/videoCalling?creator_id=${id}`;
-  };
 
   return (
     <div className="min-h-screen bg-gray-100 p-6 flex flex-col items-center">
@@ -169,12 +166,12 @@ export function Dashboard() {
           </div>
         </div>
 
-        {/* RIGHT COLUMN */}
+        {/* VIDEO CALL ROOM CARD */}
         <div className="bg-white p-6 rounded-xl shadow-md w-full md:w-2/3 flex flex-col justify-center items-center">
           <FiVideo className="text-4xl mb-3" />
           <h2 className="text-xl font-semibold mb-3">Join or Create a Video Room</h2>
           <button
-            onClick={createRoom}
+            onClick={() => window.location.href = `/roomDashboard?creator_id=${id}`}
             className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition"
           >
             Join or Create Room

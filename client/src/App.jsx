@@ -6,6 +6,7 @@ import { Header } from './Pages/Components/Header';
 import { Dashboard } from './Pages/Dashboard';
 import { Signup } from './Pages/Signup';
 import { Login } from './Pages/Login';
+import { RoomDashboard } from './Pages/RoomDashboard';
 
 // start with creating users , db , authentication (tokens) , and data encryption first(bcrypt)
 
@@ -25,10 +26,8 @@ function App() {
           isLogged= {isLogged}
           setIsLogged={setIsLogged}
            />} />
-          <Route path="/videoCalling" element={<VideoCalling
-          isLogged= {isLogged}
-          setIsLogged={setIsLogged}
-          />}/>
+          <Route path="/videoCalling/:code" element={<VideoCalling />}/>
+          <Route path="/roomDashboard" element={<RoomDashboard />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
         </Routes>

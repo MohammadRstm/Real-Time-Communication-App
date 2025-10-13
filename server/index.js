@@ -22,6 +22,7 @@ app.set("io" , io);// set io for future usage
 
 // get routers
 const userRouter = require("./routes/usersRoute");
+const roomRouter = require("./routes/roomRoute");
 
 // communication handlers
 io.on("connection", socket => {
@@ -80,7 +81,9 @@ mongoose.connect(mongoURI , {useNewUrlParser : true , useUnifiedTopology: true})
         .then(() => console.log('MongoDb Connected'))
         .catch(err => console.log(err));
 
+// add routers
 app.use('/api/users' , userRouter); 
+app.use('/api/rooms' , roomRouter);
 
 const PORT = process.env.PORT;
 server.listen(PORT, () => {

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { socket } from "../utils/socket";
+import { useNavigate, useParams } from "react-router";
+import axios from "axios";
 
 // What to handle next
 // people may refuse to show their camera so we need to add a default for that 
@@ -17,7 +19,16 @@ const RTC_CONFIG = {
   iceServers: [{ urls: ["stun:stun.l.google.com:19302"] }],
 };
 
+// base url for server
+const BASE_URL = import.meta.env.VITE_BASE_URL;
+
 export function VideoCalling() {
+  const {code} = useParams();// take room code from href
+  const navigate = useNavigate();
+
+  const [roomVerified , setRoomVerified] = useState(false);
+
+
   const localVideoRef = useRef(null);// to get your own camera/audio
   const localStreamRef = useRef(null);// to store your own stream to send for others
 
@@ -37,7 +48,39 @@ export function VideoCalling() {
     });
   };
 
+  // check link for room code and if user logged in
+  useEffect(() =>{
+    const token = localStorage.getItem('token');
+    if (!token){
+      navigate('/');// redirect to login
+      return;
+    }
+
+    const verifyRoomCode = async () =>{
+      try{
+        const response = await axios.post(`${BASE_URL}/api/rooms/verify/${code}` , {} , {
+          headers:{
+            Authorization : `Bearer ${token}`
+          }
+        });
+        const verified = response.data.exists;
+        if(!verified){
+          alert("Room doesn't exist");
+          setTimeout(() =>{
+            navigate("/dashboard");
+          } , 2000);
+        }else{
+          setRoomVerified(true);
+        }
+      }catch(err){  
+        alert(err.response?.message || 'Server error');
+      }
+    }
+    verifyRoomCode();
+  } , [code]);
+
   useEffect(() => {
+    if(!roomVerified) return;// wait 
     let mounted = true;
 
     // 1) Get local media
@@ -51,8 +94,7 @@ export function VideoCalling() {
       localStreamRef.current = stream;
       if (localVideoRef.current) localVideoRef.current.srcObject = stream;
 
-      // 2) Join a room (later make this dynamic)
-      socket.emit("join-room", "room1");
+      socket.emit("join-room", code);// join through room code
     };
 
     startLocal();
@@ -134,7 +176,7 @@ export function VideoCalling() {
       peersRef.current.clear();
       setRemoteStreams(new Map());
     };
-  }, []);
+  }, [roomVerified]);
 
   // ---- helpers ----
   const getOrCreatePeer = (peerId) => {
@@ -189,31 +231,38 @@ export function VideoCalling() {
 
   // ---- UI ----
  return (
-  <div className="bg-gray-900 min-h-screen flex flex-col items-center justify-center p-4">
-    <h1 className="text-2xl font-semibold mb-6 text-white text-center">Video Call Room</h1>
+  <>
+    {roomVerified ? (
+        <div className="bg-gray-900 min-h-screen flex flex-col items-center justify-center p-4">
+          <h1 className="text-2xl font-semibold mb-6 text-white text-center">Video Call Room</h1>
 
-    {/* Video Grid */}
-    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 justify-center">
-      {/* Local Video */}
-      <div className="relative rounded-xl overflow-hidden shadow-lg border-2 border-blue-500 w-64 h-48">
-        <video
-          ref={localVideoRef}
-          autoPlay
-          muted
-          playsInline
-          className="w-full h-full bg-black object-cover"
-        />
-        <div className="absolute bottom-2 left-2 bg-blue-500 text-white text-xs px-2 py-1 rounded">
-          You
-        </div>
+          {/* Video Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 justify-center">
+            {/* Local Video */}
+            <div className="relative rounded-xl overflow-hidden shadow-lg border-2 border-blue-500 w-64 h-48">
+              <video
+                ref={localVideoRef}
+                autoPlay
+                muted
+                playsInline
+                className="w-full h-full bg-black object-cover"
+              />
+              <div className="absolute bottom-2 left-2 bg-blue-500 text-white text-xs px-2 py-1 rounded">
+                You
+              </div>
+            </div>
+
+            {/* Remote Videos */}
+            {[...remoteStreams.entries()].map(([peerId, stream]) => (
+              <RemoteVideo key={peerId} stream={stream} />
+            ))}
+          </div>
       </div>
+    ) : (
+      <p>Verifying Room...</p>
+    )}
+  </>
 
-      {/* Remote Videos */}
-      {[...remoteStreams.entries()].map(([peerId, stream]) => (
-        <RemoteVideo key={peerId} stream={stream} />
-      ))}
-    </div>
-  </div>
 );
 
 }
