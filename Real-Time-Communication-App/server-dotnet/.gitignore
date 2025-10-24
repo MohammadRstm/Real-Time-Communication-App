@@ -1,0 +1,11 @@
+# .NET Core / ASP.NET Core
+bin/
+obj/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Ignore appsettings for secrets
+appsettings.Development.json
