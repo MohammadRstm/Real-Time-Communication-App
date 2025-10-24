@@ -1,44 +1,62 @@
+// VideoCalling.jsx
 import { useEffect, useRef, useState } from "react";
-import { socket } from "../utils/socket";
+import * as signalR from "@microsoft/signalr";
 import { useNavigate, useParams } from "react-router";
 import axios from "axios";
 
-// What to handle next
-// people may refuse to show their camera so we need to add a default for that 
-// add a mute button
-// add a leave call button
-// before entering a call immediatly we need to actually give the user the option to create a room and 
-// invite others (I have no fucking clue how to do so)
-// from any room users can share their screens so add a share screen button
-// users can write or draw on a white board(canvas) so add that
-// users can share files so we'll need to add that too
-
-
-// Use public STUN to get connectivity (no TURN here because application is small)
 const RTC_CONFIG = {
-  iceServers: [{ urls: ["stun:stun.l.google.com:19302"] }],
+  iceServers: [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" },
+    { urls: "stun:stun2.l.google.com:19302" },
+  ],
 };
 
-// base url for server
-const BASE_URL = import.meta.env.VITE_BASE_URL;
+const BASE_URL = import.meta.env.VITE_BASE_URL || "";
+
+function tryGetUserIdFromLocalStorageOrToken() {
+  try {
+    // try common storage keys
+    const rawUser = localStorage.getItem("user") || localStorage.getItem("currentUser");
+    if (rawUser) {
+      try {
+        const parsed = JSON.parse(rawUser);
+        if (parsed?.id) return parsed.id;
+        if (parsed?._id) return parsed._id;
+      } catch (e) {
+        // rawUser might be a string id already
+        if (typeof rawUser === "string" && rawUser.length > 5) return rawUser;
+      }
+    }
+
+    // try to decode token (JWT) for sub/id/userId claim
+    const token = localStorage.getItem("token");
+    if (!token) return "";
+    const payload = token.split(".")[1];
+    if (!payload) return "";
+    const decoded = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
+    return decoded?.id || decoded?.sub || decoded?.userId || "";
+  } catch (err) {
+    console.warn("Could not obtain userId from local storage or token", err);
+    return "";
+  }
+}
 
 export function VideoCalling() {
-  const {code} = useParams();// take room code from href
+  const { code } = useParams();
   const navigate = useNavigate();
 
-  const [roomVerified , setRoomVerified] = useState(false);
-
-
-  const localVideoRef = useRef(null);// to get your own camera/audio
-  const localStreamRef = useRef(null);// to store your own stream to send for others
-
-  // Map of peerId -> RTCPeerConnection
-  const peersRef = useRef(new Map());
-
-  // Map of peerId -> MediaStream for UI
+  const [roomVerified, setRoomVerified] = useState(false);
+  const [localStream, setLocalStream] = useState(null);
   const [remoteStreams, setRemoteStreams] = useState(new Map());
+  const [connectionId, setConnectionId] = useState(null);
 
-  // Helper to update UI map immutably
+  const localVideoRef = useRef(null);
+  const localStreamRef = useRef(null);
+  const peersRef = useRef(new Map()); // peerId -> RTCPeerConnection
+  const pendingCandidatesRef = useRef(new Map()); // peerId -> [candidate...]
+  const connectionRef = useRef(null); // SignalR HubConnection
+
   const setRemoteStreamFor = (peerId, stream) => {
     setRemoteStreams((prev) => {
       const next = new Map(prev);
@@ -48,234 +66,531 @@ export function VideoCalling() {
     });
   };
 
-  // check link for room code and if user logged in
-  useEffect(() =>{
-    const token = localStorage.getItem('token');
-    if (!token){
-      navigate('/');// redirect to login
-      return;
+  // if this load is a *page reload*, redirect to dashboard
+  useEffect(() => {
+    try {
+      const navEntries = performance.getEntriesByType && performance.getEntriesByType("navigation");
+      const nav = navEntries && navEntries[0];
+      if (nav && nav.type === "reload") {
+        console.log("Page reload detected — redirecting to room dashboard to avoid rejoining call");
+        navigate("/roomDashboard");
+        return;
+      }
+      // fallback for older browsers
+      if (performance.navigation && performance.navigation.type === 1) {
+        navigate("/roomDashboard");
+        return;
+      }
+    } catch (e) {
+      // ignore and proceed normally
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    const verifyRoomCode = async () =>{
-      try{
-        const response = await axios.post(`${BASE_URL}/api/rooms/verify/${code}` , {} , {
-          headers:{
-            Authorization : `Bearer ${token}`
+  // Register before unload to try to notify the server(best effort)
+  useEffect(() => {
+    const onBeforeUnload = (e) => {
+      try {
+        // Best effort: call LeaveRoom (no await) then allow unload
+        const connection = connectionRef.current;
+        if (connection?.state === 1) { // Connected state
+          try {
+            connection.invoke("LeaveRoom", code).catch(() => {});
+          } catch(e) {}
+        }
+      } catch (err) {}
+      // no custom message supported by most browsers anyway
+    };
+
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [code]);
+
+  // Verify room
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) return window.location.href = "/";
+
+    const verifyRoom = async () => {
+      try {
+        const { data } = await axios.post(
+          `${BASE_URL}/api/room/verify/${code}`,
+          {},
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (!data.exists) {
+          alert("Room doesn't exist");
+          return setTimeout(() => navigate("/"), 2000);
+        }
+        setRoomVerified(true);
+      } catch (err) {
+        alert(err.response?.data?.message || err.message || "Server error");
+      }
+    };
+    verifyRoom();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code]);
+
+  // Local video setup
+  useEffect(() => {
+    if (localVideoRef.current && localStream) {
+      localVideoRef.current.srcObject = localStream;
+    }
+  }, [localStream]);
+
+  // Main WebRTC + SignalR logic
+  useEffect(() => {
+    if (!roomVerified) return;
+    let unmounted = false;
+
+    const startLocalStreamAndConnect = async () => {
+      // 1) try get local stream
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true,
+        });
+        localStreamRef.current = stream;
+        setLocalStream(stream);
+        console.log("✅ Got local stream with tracks:", stream.getTracks().map(t => t.kind));
+      } catch (err) {
+        console.error("Camera access failed, trying audio only...", err);
+        try {
+          const audioOnly = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: false,
+          });
+          localStreamRef.current = audioOnly;
+          setLocalStream(audioOnly);
+          console.log("✅ Joined with audio only");
+        } catch (audioErr) {
+          console.error("Audio also failed, joining without media", audioErr);
+          localStreamRef.current = null;
+        }
+      }
+
+      if (unmounted) return;
+
+      // 2) create SignalR connection
+      const token = localStorage.getItem("token") || "";
+      const userId = tryGetUserIdFromLocalStorageOrToken();
+
+      const connection = new signalR.HubConnectionBuilder()
+        .withUrl(`${BASE_URL}/videoHub${userId ? `?userId=${encodeURIComponent(userId)}` : ""}`, {
+          accessTokenFactory: () => token || "",
+          withCredentials : true
+        })
+        .withAutomaticReconnect() // default reconnect behavior
+        .configureLogging(signalR.LogLevel.Information)
+        .build();
+
+      connectionRef.current = connection;
+
+      // --- Incoming handlers from server (hub) ---
+      const onAllUsers = (users) => {
+        console.log("All users in room:", users);
+        users.forEach(peerId => {
+          if (peerId !== connection.connectionId) {
+            createPeerConnection(peerId , true);// we send offers to existing users
           }
         });
-        const verified = response.data.exists;
-        if(!verified){
-          alert("Room doesn't exist");
-          setTimeout(() =>{
-            navigate("/dashboard");
-          } , 2000);
-        }else{
-          setRoomVerified(true);
+      };
+
+      const onUserJoined = (peerId) => {
+        console.log("User joined:", peerId);
+        if (peerId !== connection.connectionId) {
+          createPeerConnection(peerId , false);// we only receive the offer , not send it
         }
-      }catch(err){  
-        alert(err.response?.message || 'Server error');
-      }
-    }
-    verifyRoomCode();
-  } , [code]);
+      };
 
-  useEffect(() => {
-    if(!roomVerified) return;// wait 
-    let mounted = true;
+      const onOffer = async (payload) => {
+        // payload expected: { from: <id>, offer: <RTCSessionDescriptionInit> }
+        const { from, offer } = payload || {};
+        console.log("📨 Received offer from:", from);
+        const pc = getOrCreatePeer(from);
+        if (!pc) return;
 
-    // 1) Get local media
-    const startLocal = async () => {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(offer));
+          console.log("✅ Set remote description for offer");
+
+          // process pending candidates for this peer (if any)
+          const pending = pendingCandidatesRef.current.get(from);
+          if (pending && pending.length) {
+            pending.forEach(c => pc.addIceCandidate(new RTCIceCandidate(c)).catch(console.warn));
+            pendingCandidatesRef.current.delete(from);
+          }
+
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          console.log("📤 Sending answer to:", from);
+
+          // Invoke server method (SendAnswer(answer, to))
+          await connection.invoke("SendAnswer", pc.localDescription, from);
+        } catch (err) {
+          console.error("❌ Error handling offer:", err);
+        }
+      };
+
+      const onAnswer = async (payload) => {
+        const { from, answer } = payload || {};
+        console.log("📨 Received answer from:", from);
+        const pc = peersRef.current.get(from);
+        if (!pc) return;
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(answer));
+          console.log("✅ Set remote description for answer");
+
+          // process pending candidates for this peer (if any)
+          const pending = pendingCandidatesRef.current.get(from);
+          if (pending && pending.length) {
+            pending.forEach(c => pc.addIceCandidate(new RTCIceCandidate(c)).catch(console.warn));
+            pendingCandidatesRef.current.delete(from);
+          }
+
+        } catch (err) {
+          console.error("❌ Error handling answer:", err);
+        }
+      };
+
+      const onIceCandidate = async (payload) => {
+        const { from, candidate } = payload || {};
+        const pc = peersRef.current.get(from);
+        if (pc) {
+          try {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+            console.log("✅ Added ICE candidate from:", from);
+          } catch (err) {
+            console.warn("Failed to add ICE candidate, storing for later:", err);
+            if (!pendingCandidatesRef.current.has(from)) {
+              pendingCandidatesRef.current.set(from, []);
+            }
+            pendingCandidatesRef.current.get(from).push(candidate);
+          }
+        } else {
+          // no pc yet => store
+          if (!pendingCandidatesRef.current.has(from)) {
+            pendingCandidatesRef.current.set(from, []);
+          }
+          pendingCandidatesRef.current.get(from).push(candidate);
+        }
+      };
+
+      const onUserLeft = (peerId) => {
+        console.log("User left:", peerId);
+        const pc = peersRef.current.get(peerId);
+        if (pc) {
+          pc.close();
+          peersRef.current.delete(peerId);
+        }
+        pendingCandidatesRef.current.delete(peerId);
+        setRemoteStreamFor(peerId, null);
+      };
+
+      // Register handlers
+      connection.on("all-users", onAllUsers);
+      connection.on("user-joined", onUserJoined);
+      connection.on("offer", onOffer);
+      connection.on("answer", onAnswer);
+      connection.on("ice-candidate", onIceCandidate);
+      connection.on("user-left", onUserLeft);
+
+      // connection lifecycle handlers
+      connection.onreconnecting((err) => {
+        console.warn("SignalR reconnecting...", err?.message);
       });
-      if (!mounted) return;
 
-      localStreamRef.current = stream;
-      if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+      connection.onreconnected(async (newConnectionId) => {
+        console.log("SignalR reconnected, new connectionId:", newConnectionId);
+        setConnectionId(newConnectionId);
+        // re-join room so server can re-send all-users
+        try {
+          await connection.invoke("JoinRoom", code);
+        } catch (e) {
+          console.warn("Failed to rejoin room after reconnect:", e);
+        }
+      });
 
-      socket.emit("join-room", code);// join through room code
-    };
+      connection.onclose((err) => {
+        console.log("SignalR connection closed", err);
+        setConnectionId(null);
+      });
 
-    startLocal();
-
-    // ######## Socket handlers ########
-    // Existing users in the room -> create offers to each
-    const onAllUsers = async (users) => {
-      for (const peerId of users) {
-        await createPeerAndOffer(peerId);
-      }
-    };
-
-    // We got an offer -> create peer (if not exists), set remote desc, make answer
-    const onOffer = async ({ from, offer }) => {
-      const pc = getOrCreatePeer(from);
-
-      await pc.setRemoteDescription(new RTCSessionDescription(offer));
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-
-      socket.emit("answer", { to: from, answer: pc.localDescription });
-    };
-
-    // We got an answer -> complete handshake
-    const onAnswer = async ({ from, answer }) => {
-      const pc = peersRef.current.get(from);
-      if (!pc) return;
-      await pc.setRemoteDescription(new RTCSessionDescription(answer));
-    };
-
-    // ICE candidates
-    const onIceCandidate = async ({ from, candidate }) => {
-      const pc = peersRef.current.get(from);
-      if (!pc || !candidate) return;
       try {
-        await pc.addIceCandidate(new RTCIceCandidate(candidate));
-      } catch (e) {
-        console.warn("Error adding ICE candidate", e);
+        await connection.start();
+        console.log("SignalR connected. connectionId:", connection.connectionId);
+        setConnectionId(connection.connectionId);
+
+        // Join room (server will respond with "all-users")
+        await connection.invoke("JoinRoom", code);
+      } catch (err) {
+        console.error("SignalR start failed:", err);
       }
-    };
+    }; // end startLocalStreamAndConnect
 
-    // When a user leaves
-    const onUserLeft = (peerId) => {
-      const pc = peersRef.current.get(peerId);
-      if (pc) {
-        pc.ontrack = null;
-        pc.onicecandidate = null;
-        pc.close();
-        peersRef.current.delete(peerId);
-      }
-      setRemoteStreamFor(peerId, null);
-    };
+    startLocalStreamAndConnect();
 
-    socket.on("all-users", onAllUsers);
-    socket.on("offer", onOffer);
-    socket.on("answer", onAnswer);
-    socket.on("ice-candidate", onIceCandidate);
-    socket.on("user-left", onUserLeft);
-
+    // cleanup on unmount
     return () => {
-      mounted = false;
+      unmounted = true;
+      (async () => {
+        console.log("🧹 Cleaning up...");
+        // tell server we are leaving(best effort)
+        try { 
+          await leaveRoom();
+        } catch (e) {
+          /* ignore */
+        }
+        // stop local tracks
+        if (localStreamRef.current) {
+          try {
+            localStreamRef.current.getTracks().forEach(track => track.stop());
+          } catch (e) { /* ignore */ }
+        }
 
-      // Clean up sockets
-      socket.off("all-users", onAllUsers);
-      socket.off("offer", onOffer);
-      socket.off("answer", onAnswer);
-      socket.off("ice-candidate", onIceCandidate);
-      socket.off("user-left", onUserLeft);
+        // close pcs
+        peersRef.current.forEach((pc) => {
+          try { pc.close(); } catch (e) { /* ignore */ }
+        });
+        peersRef.current.clear();
+        pendingCandidatesRef.current.clear();
 
-      // Stop local tracks
-      localStreamRef.current?.getTracks().forEach((t) => t.stop());
+        // clear remote streams state
+        setRemoteStreams(new Map());
 
-      // Close peer connections
-      for (const [, pc] of peersRef.current) {
-        pc.ontrack = null;
-        pc.onicecandidate = null;
-        pc.close();
-      }
-      peersRef.current.clear();
-      setRemoteStreams(new Map());
+        // stop connection
+        if (connectionRef.current) {
+          try {
+            // remove listeners
+            connectionRef.current.off("all-users");
+            connectionRef.current.off("user-joined");
+            connectionRef.current.off("offer");
+            connectionRef.current.off("answer");
+            connectionRef.current.off("ice-candidate");
+            connectionRef.current.off("user-left");
+
+            await connectionRef.current.stop();
+            await connectionRef.current.dispose();
+            connectionRef.current = null;
+          } catch (e) {
+            console.warn("Error stopping SignalR connection:", e);
+          }
+        }
+      })();
     };
-  }, [roomVerified]);
+  }, [roomVerified, code]);
+  // clone stream to gurantee local stream appearing
 
-  // ---- helpers ----
+  // Helper to create or return existing peer
   const getOrCreatePeer = (peerId) => {
+    const connection = connectionRef.current;
+    if (!connection) {
+      console.warn("No SignalR connection yet.");
+    }
+    if (!peerId || peerId === connection?.connectionId) return null;
+
     let pc = peersRef.current.get(peerId);
     if (pc) return pc;
 
+    console.log(`🔄 Creating new peer connection to: ${peerId}`);
     pc = new RTCPeerConnection(RTC_CONFIG);
     peersRef.current.set(peerId, pc);
 
-    // Send our local tracks to this peer
-    localStreamRef.current?.getTracks().forEach((track) => {
-      pc.addTrack(track, localStreamRef.current);
-    });
+    // Create a remote MediaStream and store in state
+    const remoteStream = new MediaStream();
+    setRemoteStreamFor(peerId, remoteStream);
 
-    // Gather ICE and send to remote
-    pc.onicecandidate = (e) => {
-      if (e.candidate) {
-        socket.emit("ice-candidate", {
-          to: peerId,
-          candidate: e.candidate,
+    // ontrack
+    pc.ontrack = (event) => {
+      console.log(`🎯 Received ${event.track.kind} track from ${peerId}`);
+      if (!remoteStream.getTracks().some(t => t.id === event.track.id)) {
+        remoteStream.addTrack(event.track);
+        console.log(`✅ Added ${event.track.kind} track. Stream now has:`, {
+          video: remoteStream.getVideoTracks().length,
+          audio: remoteStream.getAudioTracks().length
         });
       }
     };
 
-    // When we receive remote tracks
-    const remoteStream = new MediaStream();
-    pc.ontrack = (e) => {
-      // Add all tracks to a single stream per peer
-      e.streams[0].getTracks().forEach((t) => remoteStream.addTrack(t));
-      setRemoteStreamFor(peerId, remoteStream);
-    };
-
-    // connection state logs
-    pc.onconnectionstatechange = () => {
-      if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
-        // Clean up failed peers
-        pc.close();
-        peersRef.current.delete(peerId);
-        setRemoteStreamFor(peerId, null);
+    // ICE candidate -> send to server
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        // server method expects (candidate, to)
+        try {
+          connection?.invoke("SendIceCandidate", event.candidate, peerId)
+            .catch(e => console.warn("SendIceCandidate failed:", e));
+        } catch (e) {
+          console.warn("Could not invoke SendIceCandidate:", e);
+        }
       }
     };
+
+    // Connection state
+    pc.onconnectionstatechange = () => {
+      console.log(`🔗 ${peerId} connection state: ${pc.connectionState}`);
+      if (pc.connectionState === "connected") {
+        // Process pending candidates
+        const pending = pendingCandidatesRef.current.get(peerId);
+        if (pending) {
+          pending.forEach(c => {
+            pc.addIceCandidate(new RTCIceCandidate(c)).catch(console.warn);
+          });
+          pendingCandidatesRef.current.delete(peerId);
+        }
+      }
+    };
+
+    // Add local tracks if exist
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => {
+        try {
+          pc.addTrack(track, localStreamRef.current);
+          console.log(`📤 Added local ${track.kind} track to ${peerId}`);
+        } catch (e) {
+          console.warn("addTrack failed:", e);
+        }
+      });
+    }
 
     return pc;
   };
 
-  const createPeerAndOffer = async (peerId) => {
-    const pc = getOrCreatePeer(peerId);
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    socket.emit("offer", { to: peerId, offer: pc.localDescription });
+  // Helper to notify server we are leaving
+  const leaveRoom = async () => {
+    const connection = connectionRef.current;
+    if (!connection || !code) return;
+    try {
+      // fire-and-forget LeaveRoom (server will broadcast user-left)
+      connection.invoke("LeaveRoom", code).catch(e => console.warn("LeaveRoom invoke failed:", e));
+    } catch (e) {
+      console.warn("Error invoking LeaveRoom:", e);
+    }
   };
 
-  // ---- UI ----
- return (
-  <>
-    {roomVerified ? (
-        <div className="bg-gray-900 min-h-screen flex flex-col items-center justify-center p-4">
-          <h1 className="text-2xl font-semibold mb-6 text-white text-center">Video Call Room</h1>
+  // Called when we need to create an offer to a peer
+  const createPeerConnection = async (peerId , shouldCreateOffer = true) => {
+    const connection = connectionRef.current;
+    if (!connection) {
+      console.warn("No SignalR connection available to send offer.");
+      return;
+    }
+    console.log(`🤝 Creating peer connection with: ${peerId}`);
+    const pc = getOrCreatePeer(peerId);
+    if (!pc) return;
+    if (shouldCreateOffer){
+      try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        // server expects (offer, to)
+        await connection.invoke("SendOffer", pc.localDescription, peerId);
+        console.log(`📤 Sent offer to: ${peerId}`);
+      } catch (err) {
+        console.error("❌ Error creating offer:", err);
+      }
+    }
+  };
 
-          {/* Video Grid */}
+  return (
+    <>
+      {roomVerified ? (
+        <div className="bg-gray-900 min-h-screen flex flex-col items-center justify-center p-4">
+          <h1 className="text-2xl font-semibold mb-6 text-white text-center">
+            Video Call Room: {code}
+          </h1>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 justify-center">
-            {/* Local Video */}
+            {/* Local video */}
             <div className="relative rounded-xl overflow-hidden shadow-lg border-2 border-blue-500 w-64 h-48">
-              <video
-                ref={localVideoRef}
-                autoPlay
-                muted
-                playsInline
-                className="w-full h-full bg-black object-cover"
-              />
+              {localStream && localStream.getVideoTracks().length > 0 ? (
+                <video
+                  ref={localVideoRef}
+                  autoPlay
+                  muted
+                  playsInline
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full bg-gray-800 flex items-center justify-center text-white">
+                  <div className="text-center">
+                    <div className="text-lg">No Camera</div>
+                    <div className="text-sm">Audio Only</div>
+                  </div>
+                </div>
+              )}
               <div className="absolute bottom-2 left-2 bg-blue-500 text-white text-xs px-2 py-1 rounded">
                 You
               </div>
             </div>
 
-            {/* Remote Videos */}
+            {/* Remote videos */}
             {[...remoteStreams.entries()].map(([peerId, stream]) => (
-              <RemoteVideo key={peerId} stream={stream} />
+              <RemoteVideo key={peerId} stream={stream} peerId={peerId} />
             ))}
           </div>
-      </div>
-    ) : (
-      <p>Verifying Room...</p>
-    )}
-  </>
-
-);
-
+        </div>
+      ) : (
+        <div className="flex items-center justify-center min-h-screen">
+          <p className="text-xl">Verifying Room...</p>
+        </div>
+      )}
+    </>
+  );
 }
 
-function RemoteVideo({ stream }) {
-  const ref = useRef(null);
+function RemoteVideo({ stream, peerId }) {
+  const videoRef = useRef(null);
+  const audioRef = useRef(null);
+  const [, setTick] = useState(0); // used to trigger re-render on track changes
+
   useEffect(() => {
-    if (ref.current && stream) ref.current.srcObject = stream;
+    if (!stream) return;
+
+    // attach stream to elements
+    if (videoRef.current) videoRef.current.srcObject = stream;
+    if (audioRef.current) audioRef.current.srcObject = stream;
+
+    const handleTrackChange = () => {
+      setTick(t => t + 1); // force re-render when tracks change
+    };
+
+    stream.addEventListener("addtrack", handleTrackChange);
+    stream.addEventListener("removetrack", handleTrackChange);
+
+    return () => {
+      stream.removeEventListener("addtrack", handleTrackChange);
+      stream.removeEventListener("removetrack", handleTrackChange);
+    };
   }, [stream]);
 
+  const hasVideo = stream && stream.getVideoTracks().length > 0;
+  const hasAudio = stream && stream.getAudioTracks().length > 0;
+
   return (
-    <div className="relative rounded-xl overflow-hidden shadow-lg border-2 border-gray-700 w-64 h-48">
-      <video autoPlay playsInline ref={ref} className="w-full h-full bg-black object-cover" />
+    <div className="relative rounded-xl overflow-hidden shadow-lg border-2 border-green-500 w-64 h-48">
+      {hasVideo ? (
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          className="w-full h-full bg-black object-cover"
+        />
+      ) : (
+        <div className="w-full h-full bg-gray-800 flex items-center justify-center text-white">
+          <div className="text-center">
+            <div className="text-lg">{hasAudio ? "Audio Only" : "No Media"}</div>
+            <div className="text-sm">Remote User</div>
+          </div>
+        </div>
+      )}
+
+      <audio ref={audioRef} autoPlay playsInline className="hidden" />
+
+      <div className="absolute bottom-2 left-2 bg-green-500 text-white text-xs px-2 py-1 rounded">
+        Remote {hasAudio ? "🔊" : "🔇"} {hasVideo ? "📹" : "📵"}
+      </div>
+      <div className="absolute top-2 right-2 bg-gray-700 text-white text-xs px-2 py-1 rounded">
+        {peerId?.slice(0, 6)}
+      </div>
     </div>
   );
 }
+

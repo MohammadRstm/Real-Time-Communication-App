@@ -1,10 +1,11 @@
 import { useState } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
+import displayError from "../utils/displayError";
 
 const BASE_URL = import.meta.env.VITE_BASE_URL;
 
-export function Signup() {
+export function Signup({showAlert}) {
     const [signupForm, setSignupForm] = useState({
         fullName: "",
         email: "",
@@ -21,19 +22,17 @@ export function Signup() {
     const submitForm = async (e) => {
         e.preventDefault(); // prevent refresh
         try {
-            const response = await axios.post(`${BASE_URL}/api/users/signup`, signupForm);
+            const response = await axios.post(`${BASE_URL}/api/user/signup`, signupForm);
             const data = response.data;
             const token = data.token;
             localStorage.setItem("token", token);
+            showAlert("success" , "Signup successfull!");
             // redirect to dashboard here (use navigate)
             setTimeout(() => {
                 window.location.href = '/login';
             } , 2000);
         } catch (err) {
-            if (err.response)
-                alert(err.response.data?.message || "Server error");
-            else
-                alert("Network error");
+           displayError(err , showAlert);
         }
     };
 

@@ -3,10 +3,12 @@ import { jwtDecode } from "jwt-decode";
 import { useState, useEffect } from "react";
 import { FiSearch, FiVideo, FiX } from "react-icons/fi";
 import { io } from "socket.io-client";
+import displayError from "../utils/displayError";
+import { ChatWidget } from "./Components/ChatWidget";
 
 const BASE_URL = import.meta.env.VITE_BASE_URL;
 
-export function Dashboard() {
+export function Dashboard({showAlert}) {
   const [suggestedUsers, setSuggestedUsers] = useState([]);
   const [searchInput, setSearchInput] = useState("");
   const [friendRequests, setFriendRequests] = useState([]);
@@ -15,32 +17,35 @@ export function Dashboard() {
 
   const token = localStorage.getItem("token");
   if (!token) window.location.href = "/login";
-  const { id, fullName } = jwtDecode(token);
+  const decoded = jwtDecode(token);
 
-  useEffect(() => {
-    if (!token) return;
-    const socketConn = io(`${BASE_URL}`, { query: { userId: id } });
-    setSocket(socketConn);
+  const id = decoded.sub;
+  const fullName = decoded.family_name;
 
-    socketConn.on("friend-request", (data) => {
-      setFriendRequests((prev) => [
-        ...prev,
-        { _id: data.from, fullName: data.fullName, email: data.email },
-      ]);
-    });
+  // useEffect(() => {
+  //   if (!token) return;
+  //   const socketConn = io(`${BASE_URL}`, { query: { userId: id } });
+  //   setSocket(socketConn);
 
-    return () => socketConn.disconnect();
-  }, []);
+  //   socketConn.on("friend-request", (data) => {
+  //     setFriendRequests((prev) => [
+  //       ...prev,
+  //       { _id: data.from, fullName: data.fullName, email: data.email },
+  //     ]);
+  //   });
+
+  //   return () => socketConn.disconnect();
+  // }, []);
 
   useEffect(() => {
     const getFriendRequests = async () => {
       try {
-        const response = await axios.get(`${BASE_URL}/api/users/friendRequests`, {
+        const response = await axios.get(`${BASE_URL}/api/user/friendRequests`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         setFriendRequests(response.data);
       } catch (err) {
-        console.error(err.response?.message || "Server error");
+        displayError(err , showAlert);
       }
     };
     getFriendRequests();
@@ -49,12 +54,12 @@ export function Dashboard() {
   const displaySuggestions = async () => {
     if (!searchInput.trim()) return;
     try {
-      const response = await axios.get(`${BASE_URL}/api/users/suggestions/${searchInput}`, {
+      const response = await axios.get(`${BASE_URL}/api/user/suggestions/${searchInput}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setSuggestedUsers(response.data);
     } catch (err) {
-      alert(err.response?.message || "Error fetching suggestions");
+      displayError(err , showAlert);
     }
   };
 
@@ -67,40 +72,43 @@ export function Dashboard() {
 
   const sendFriendRequest = async (userId) => {
     try {
-      await axios.post(`${BASE_URL}/api/users/sendFreindRequest/${userId}`, {}, {
+      await axios.post(`${BASE_URL}/api/user/sendFreindRequest/${userId}`, {}, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      alert("Friend request sent!");
+      showAlert("success" , "Friend request sent");
     } catch (err) {
-      alert(err.response?.message || "Error sending request");
+      displayError(err , showAlert);
     }
   };
 
   const acceptFriendRequest = async (requestId) => {
     try {
-      await axios.post(`${BASE_URL}/api/users/acceptFriendRequest/${requestId}`, {}, {
+      await axios.post(`${BASE_URL}/api/user/acceptFriendRequest/${requestId}`, {}, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      setFriendRequests((prev) => prev.filter(r => r._id !== requestId));
+      setFriendRequests((prev) => prev.filter(r => r.from !== requestId));
+      showAlert("success" , "Friend request accepted");
     } catch (err) {
-      alert(err.response?.message || "Error accepting request");
+      displayError(err , showAlert);
     }
   };
 
   const rejectFriendRequest = async (requestId) => {
     try {
-      await axios.post(`${BASE_URL}/api/users/rejectFriendRequest/${requestId}`, {}, {
+      await axios.post(`${BASE_URL}/api/user/rejectFriendRequest/${requestId}`, {}, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      setFriendRequests((prev) => prev.filter(r => r._id !== requestId));
+      setFriendRequests((prev) => prev.filter(r => r.from !== requestId));
     } catch (err) {
-      alert(err.response?.message || "Error rejecting request");
+      displayError(err , showAlert);
     }
   };
 
 
   return (
     <div className="min-h-screen bg-gray-100 p-6 flex flex-col items-center">
+      <ChatWidget showAlert={showAlert}/>
+
       <h1 className="text-2xl font-bold mb-6">Welcome, {fullName}</h1>
 
       <div className="flex flex-col md:flex-row gap-6 w-full max-w-6xl">
@@ -136,7 +144,7 @@ export function Dashboard() {
                   >
                     <div>{user.fullName} — <span className="text-gray-600">{user.email}</span></div>
                     <button
-                      onClick={() => sendFriendRequest(user._id)}
+                      onClick={() => sendFriendRequest(user.id)}
                       className="px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 transition"
                     >
                       Add Friend
@@ -197,13 +205,13 @@ export function Dashboard() {
                     <div>{user.fullName} — <span className="text-gray-600">{user.email}</span></div>
                     <div className="flex gap-2">
                       <button
-                        onClick={() => acceptFriendRequest(user._id)}
+                        onClick={() => acceptFriendRequest(user.from)}
                         className="px-2 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm"
                       >
                         Accept
                       </button>
                       <button
-                        onClick={() => rejectFriendRequest(user._id)}
+                        onClick={() => rejectFriendRequest(user.from)}
                         className="px-2 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 text-sm"
                       >
                         Reject

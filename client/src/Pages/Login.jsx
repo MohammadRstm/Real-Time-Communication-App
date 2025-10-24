@@ -1,10 +1,11 @@
 import axios from "axios";
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import displayError from "../utils/displayError";
 
 const BASE_URL = import.meta.env.VITE_BASE_URL;
 
-export function Login() {
+export function Login({showAlert}) {
     const [loginForm, setLoginForm] = useState({
         email: "",
         password: ""
@@ -28,19 +29,17 @@ export function Login() {
     const submitForm = async (e) => {
         e.preventDefault(); // prevent refresh
         try {
-            const response = await axios.post(`${BASE_URL}/api/users/login`, loginForm);
+            const response = await axios.post(`${BASE_URL}/api/user/login`, loginForm);
             const data = response.data;
             const token = data.token;
             localStorage.setItem("token", token);
+            showAlert("success" , "Login Successfull");
             // redirect to dashboard
             setTimeout(() => {
             window.location.href = "/"; // dashboard
             }, 2000)
         } catch (err) {
-            if (err.response)
-                alert(err.response.data?.message || "Server error");
-            else
-                alert("Network error");
+           displayError(err , showAlert);
         }
     };
 

@@ -2,10 +2,11 @@ import axios from "axios";
 import { jwtDecode } from "jwt-decode";
 import { useState } from "react";
 import { FiX } from "react-icons/fi";
+import displayError from "../utils/displayError";
 
 const BASE_URL = import.meta.env.VITE_BASE_URL;
 
-export function RoomDashboard() {
+export function RoomDashboard({showAlert}) {
   const [createRoomModal, setCreateRoomModal] = useState(false);
   const [joinRoomModal, setJoinRoomModal] = useState(false);
   const [friends, setFriends] = useState([]);
@@ -18,25 +19,26 @@ export function RoomDashboard() {
 
   const getAllFriends = async () => {
     try {
-      const response = await axios.get(`${BASE_URL}/api/users/friends`, {
+      const response = await axios.get(`${BASE_URL}/api/user/friends`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setFriends(response.data.friends || response.data);
     } catch (err) {
-      alert(err.response?.message || "Error fetching friends");
+      displayError(err , showAlert);
     }
   };
 
   const createRoom = async () => {
     try {
-      const response = await axios.post(`${BASE_URL}/api/rooms/create`, {}, {
+      const response = await axios.post(`${BASE_URL}/api/room/create`, {}, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setNewRoomData(response.data);
       await getAllFriends();
       setCreateRoomModal(true);
+      showAlert("success" , "Room created");
     } catch (err) {
-      alert(err.response?.message || "Server error");
+      displayError(err , showAlert);
     }
   };
 
