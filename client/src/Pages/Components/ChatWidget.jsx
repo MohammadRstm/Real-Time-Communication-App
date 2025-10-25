@@ -146,18 +146,18 @@ export function ChatWidget({ showAlert }) {
 
     try {
       // Save message to database
-      await axios.post(
-        `${BASE_URL}/api/message/saveMessage/${selectedFriend.id}`,
-        JSON.stringify(messageText),
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+    //   await axios.post(
+    //     `${BASE_URL}/api/message/saveMessage/${selectedFriend.id}`,
+    //     JSON.stringify(messageText),
+    //     {
+    //       headers: {
+    //         Authorization: `Bearer ${token}`,
+    //         "Content-Type": "application/json",
+    //       },
+    //     }
+    //   );
 
-      // Send via SignalR
+      // Send via SignalR & save it
       if (HubConnection.current) {
         await HubConnection.current.invoke(
           "SendMessage",

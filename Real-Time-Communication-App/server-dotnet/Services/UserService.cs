@@ -1,5 +1,7 @@
-﻿using MongoDB.Driver;
+﻿using Microsoft.AspNetCore.SignalR;
+using MongoDB.Driver;
 using server_dotnet.DTOs;
+using server_dotnet.Hubs;
 using server_dotnet.Models;
 
 namespace server_dotnet.Services
@@ -7,10 +9,12 @@ namespace server_dotnet.Services
     public class UserService
     {
         private readonly IMongoCollection<User> _users;
+        private readonly IHubContext<NotificationHub> _notificationHub;
 
-        public UserService(IMongoDatabase database)
+        public UserService(IMongoDatabase database, IHubContext<NotificationHub> notificationHub)
         {
             _users = database.GetCollection<User>("Users");
+            _notificationHub = notificationHub;
         }
 
         // Find user by email
@@ -107,6 +111,11 @@ namespace server_dotnet.Services
                 // Remove for requester if exists
                 requester.FriendRequests.RemoveAll(r => r.From == userId);
 
+                // send notifications to sender that request accepted
+                await _notificationHub.Clients.Group(senderId)
+                    .SendAsync("ReceiveNotification", $"Friend request to {user.FullName} was accepted");
+
+
                 // Update in DB
                 await UpdateUserInfo(user);
                 await UpdateUserInfo(requester);
@@ -117,11 +126,37 @@ namespace server_dotnet.Services
         public async Task RejectFriendRequest(string userId, string senderId)
         {
             var requestedUser = await GetUserById(userId);
+            var userSender = await GetUserById(senderId);
             if (requestedUser != null)
             {
+                // remove from freind requests
                 requestedUser.FriendRequests.RemoveAll(r => r.From == senderId);
                 await UpdateUserInfo(requestedUser);
+
+                if (userSender != null)
+                {
+                    await _notificationHub.Clients.Group(senderId)
+                        .SendAsync("ReceiveNotification", $"Friend request to {userSender.FullName} was rejected");
+                }
+
+
             }
+        }
+
+        // Send Friend Request
+        public async Task SendFriendRequest(User targetedUser , string userId)
+        {
+            // send friend request
+            targetedUser.FriendRequests.Add(new FriendRequests
+            {
+                From = userId,
+                SentAt = DateTime.UtcNow
+            });
+            await UpdateUserInfo(targetedUser);
+            // send notification for requested user
+            var sender = await GetUserById(userId);
+            await _notificationHub.Clients.Group(targetedUser.Id)
+                .SendAsync("ReceiveNotification", "You received a friend request from " + sender.FullName);
         }
     }
 }

@@ -177,12 +177,7 @@ namespace server_dotnet.Controllers
 
                 // Send Friend request
 
-                targetedUser.FriendRequests.Add(new FriendRequests
-                {
-                    From = userId,
-                    SentAt = DateTime.UtcNow
-                });
-                await _userService.UpdateUserInfo(targetedUser);
+                
 
                 return Ok(new {message = "Friend request send successfully"});
             }catch(Exception ex)
