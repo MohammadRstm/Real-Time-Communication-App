@@ -3,6 +3,7 @@ using MongoDB.Driver;
 using server_dotnet.DTOs;
 using server_dotnet.Hubs;
 using server_dotnet.Models;
+using System.Collections.Immutable;
 
 namespace server_dotnet.Services
 {
@@ -156,7 +157,34 @@ namespace server_dotnet.Services
             // send notification for requested user
             var sender = await GetUserById(userId);
             await _notificationHub.Clients.Group(targetedUser.Id)
-                .SendAsync("ReceiveNotification", "You received a friend request from " + sender.FullName);
+                .SendAsync("ReceiveNotification", $"You received a friend request from {sender.FullName}");
+        }
+
+        // Block Friends 
+        public async Task BlockFriend(string userId , string friendId)
+        {
+            try
+            {
+                // remove friend from user's list
+                var userData = await GetUserById(userId);
+                int friendIndex = userData.Friends.FindIndex(f => f == friendId);
+                userData.Friends.RemoveAt(friendIndex);
+                await UpdateUserInfo(userData);
+
+                // remove user from friend's list
+                var friendData = await GetUserById(friendId);
+                friendIndex = friendData.Friends.FindIndex(f => f == userId);
+                friendData.Friends.RemoveAt(friendIndex);
+                await UpdateUserInfo(friendData);
+
+                // send notification to friend
+                await _notificationHub.Clients.Group(friendId)
+                    .SendAsync("ReceiveNotification", $"{userData.FullName} blocked you");
+
+            }catch(Exception ex)
+            {
+                throw; 
+            }
         }
     }
 }

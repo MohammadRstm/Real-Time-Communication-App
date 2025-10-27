@@ -3,6 +3,11 @@ import { useEffect, useRef, useState } from "react";
 import * as signalR from "@microsoft/signalr";
 import { useNavigate, useParams } from "react-router";
 import axios from "axios";
+import { jwtDecode } from "jwt-decode";
+import { FileTextIcon, MessageSquare } from "lucide-react";
+import GroupChat from "./Components/GroupChat";
+import { FileText } from "lucide-react"; 
+
 
 const RTC_CONFIG = {
   iceServers: [
@@ -50,12 +55,20 @@ export function VideoCalling() {
   const [localStream, setLocalStream] = useState(null);
   const [remoteStreams, setRemoteStreams] = useState(new Map());
   const [connectionId, setConnectionId] = useState(null);
+  // side bar options
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
+
 
   const localVideoRef = useRef(null);
   const localStreamRef = useRef(null);
   const peersRef = useRef(new Map()); // peerId -> RTCPeerConnection
   const pendingCandidatesRef = useRef(new Map()); // peerId -> [candidate...]
   const connectionRef = useRef(null); // SignalR HubConnection
+  const groupChatRef = useRef(null); // Group Chat HubConnection
+
+  const [messages , setMessages] = useState([]);
+  const [currentUserId , setCurrentUserId] = useState(null);
 
   const setRemoteStreamFor = (peerId, stream) => {
     setRemoteStreams((prev) => {
@@ -65,9 +78,51 @@ export function VideoCalling() {
       return next;
     });
   };
+  // Group chat signalr setup
+  useEffect(() =>{
+    const token = localStorage.getItem("token");
+    if(!token) return;
+    const payload = jwtDecode(token);
+    setCurrentUserId(payload.sub);
+    const connection = new signalR.HubConnectionBuilder()
+          .withUrl(`${BASE_URL}/videoGroupChatHub`, {
+            accessTokenFactory: () => token,
+            transport: signalR.HttpTransportType.WebSockets,
+            skipNegotiation: true,
+          })
+          .withAutomaticReconnect()
+          .build();
+    groupChatRef.current = connection;
+    connection
+      .start()
+      .then(() => {
+        console.log("Connected to group chat hub");
+        connection.invoke("JoinRoom", code)
+        .then(() => console.log("Joined room:", code))
+        .catch(console.error);
+      })
+      .catch((err) => console.error("Group Chat Connection failed:", err));
+
+    connection.on("VideoGroupChatMessage", (messageObj) => {
+      setMessages((prev) => [...prev , messageObj]); 
+    });
+
+    connection.on("Error", (errorMsg) => {
+      console.error("Group Chat error:", errorMsg);
+    });
+
+    return () => {
+      connection.invoke("LeaveRoom", code).catch(() => {});
+      connection.stop();
+    };
+  } , []);
 
   // if this load is a *page reload*, redirect to dashboard
   useEffect(() => {
+    if(localStorage.getItem("justLoggedIn")){
+      localStorage.removeItem("justLoggedIn");
+      return;
+    } 
     try {
       const navEntries = performance.getEntriesByType && performance.getEntriesByType("navigation");
       const nav = navEntries && navEntries[0];
@@ -490,14 +545,40 @@ export function VideoCalling() {
     }
   };
 
-  return (
-    <>
+ return (
+  <div className="relative flex flex-col min-h-screen bg-gray-900 text-white overflow-x-hidden pt-16">
+    {/* Header */}
+    <header className="w-full bg-gray-800 p-4 flex justify-between items-center shadow-md z-20">
+      <h1 className="text-xl font-semibold">Room: {code}</h1>
+    </header>
+
+    {/* Floating vertical menu on the right */}
+    {!sidebarOpen && (
+      <div className="fixed right-0 top-1/2 -translate-y-1/2 flex flex-col items-center space-y-4 z-40">
+        {/* Group Chat Button */}
+        <button
+          onClick={toggleSidebar}
+          className="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-l-full shadow-lg transition-transform transform hover:scale-110"
+          title="Group Chat"
+          style={{
+            position: "fixed",
+            right: 0,
+            top: "50%",
+            transform: "translateY(-50%)",
+            borderTopLeftRadius: "9999px",
+            borderBottomLeftRadius: "9999px",
+          }}
+        >
+          <MessageSquare size={24} />
+        </button>
+      </div>
+    )}
+
+    {/* Main video area */}
+    <main className="flex-1 flex flex-col items-center justify-center p-4 relative">
       {roomVerified ? (
-        <div className="bg-gray-900 min-h-screen flex flex-col items-center justify-center p-4">
-          <h1 className="text-2xl font-semibold mb-6 text-white text-center">
-            Video Call Room: {code}
-          </h1>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 justify-center">
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 justify-center w-full max-w-6xl">
             {/* Local video */}
             <div className="relative rounded-xl overflow-hidden shadow-lg border-2 border-blue-500 w-64 h-48">
               {localStream && localStream.getVideoTracks().length > 0 ? (
@@ -509,14 +590,14 @@ export function VideoCalling() {
                   className="w-full h-full object-cover"
                 />
               ) : (
-                <div className="w-full h-full bg-gray-800 flex items-center justify-center text-white">
+                <div className="w-full h-full bg-gray-800 flex items-center justify-center">
                   <div className="text-center">
                     <div className="text-lg">No Camera</div>
-                    <div className="text-sm">Audio Only</div>
+                    <div className="text-sm text-gray-400">Audio Only</div>
                   </div>
                 </div>
               )}
-              <div className="absolute bottom-2 left-2 bg-blue-500 text-white text-xs px-2 py-1 rounded">
+              <div className="absolute bottom-2 left-2 bg-blue-500 text-xs px-2 py-1 rounded">
                 You
               </div>
             </div>
@@ -526,14 +607,90 @@ export function VideoCalling() {
               <RemoteVideo key={peerId} stream={stream} peerId={peerId} />
             ))}
           </div>
-        </div>
+        </>
       ) : (
-        <div className="flex items-center justify-center min-h-screen">
+        <div className="flex items-center justify-center h-full">
           <p className="text-xl">Verifying Room...</p>
         </div>
       )}
-    </>
-  );
+    </main>
+
+    {/* Sidebar (Group Chat) */}
+    <aside
+      className={`fixed top-15 right-0 h-[calc(100%-4rem)] w-80 bg-gray-800 text-white shadow-lg transform transition-transform duration-300 ease-in-out z-30 ${
+        sidebarOpen ? "translate-x-0" : "translate-x-full"
+      }`}
+    >
+      <div className="flex flex-col h-full">
+        <div className="p-4 border-b border-gray-700 flex justify-between items-center">
+          <h2 className="text-lg font-semibold">Group Chat</h2>
+          <button
+            onClick={toggleSidebar}
+            className="text-gray-400 hover:text-white transition"
+          >
+            ✖
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {messages.length === 0 ? (
+            <p className="text-center text-gray-400 mt-4">No messages yet...</p>
+          ) : (          
+          messages.map((m, i) => {
+            const isMine = m.senderId === currentUserId;
+            const isFile =
+              m.message.startsWith("http") &&
+              /\.(pdf|jpg|jpeg|png|gif|mp4|zip|docx|txt)$/i.test(m.message);
+
+            // Extract filename from URL if it's a file
+            const fileName = isFile
+            ? decodeURIComponent(m.message.split("/").pop().replace(/^[\w-]+_/, ""))
+            : "";
+            return (
+              <div key={i} className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
+                <div
+                  className={`px-3 py-2 rounded-lg max-w-[70%] ${
+                    isMine ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-100"
+                  }`}
+                >
+                  {isFile ? (
+                    <a
+                      href={m.message}
+                      download
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 underline hover:text-blue-200"
+                    >
+                      <FileTextIcon className="w-4 h-4" />
+                      <span>{fileName}</span>
+                    </a>
+                  ) : (
+                    <p>{m.message}</p>
+                  )}
+
+                  <small className="block text-xs opacity-70 mt-1 text-right">
+                    {new Date(m.sentAt || m.createdAt).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </small>
+                </div>
+              </div>
+            )
+          }))}
+        </div>
+
+        <GroupChat
+        groupChatRef={groupChatRef}
+        code={code}
+        messages={messages}
+        currentUserId={currentUserId}
+        />
+      </div>
+    </aside>
+  </div>
+);
+
 }
 
 function RemoteVideo({ stream, peerId }) {

@@ -80,7 +80,7 @@ export function Signup({showAlert}) {
 
                 <p className="text-sm text-center mt-4 text-gray-600">
                     Already have an account?{" "}
-                    <Link to="/login" className="text-indigo-600 hover:underline">
+                    <Link to="/" className="text-indigo-600 hover:underline">
                         Login
                     </Link>
                 </p>

@@ -75,7 +75,7 @@ builder.Services.AddAuthentication(options =>
             // Check if the request is for your ChatHub endpoint
             var path = context.HttpContext.Request.Path;
             if (!string.IsNullOrEmpty(accessToken) &&
-                (path.StartsWithSegments("/chatHub") || path.StartsWithSegments("/videoHub") || path.StartsWithSegments("/notificationHub")))
+                (path.StartsWithSegments("/chatHub") || path.StartsWithSegments("/videoHub") || path.StartsWithSegments("/notificationHub") || path.StartsWithSegments("/videoGroupChatHub")))
             {
                 context.Token = accessToken;
             }
@@ -133,10 +133,11 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// exposes WebSockets endpoints
+// expose WebSockets endpoints
 app.MapHub<VideoHub>("/videoHub");
 app.MapHub<ChatHub>("/chatHub").RequireAuthorization();
 app.MapHub<NotificationHub>("/notificationHub").RequireAuthorization();
+app.MapHub<VideoGroupChatHub>("/videoGroupChatHub").RequireAuthorization();
 
 
 app.Run();

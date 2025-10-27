@@ -10,31 +10,39 @@ import { RoomDashboard } from './Pages/RoomDashboard';
 import CustomAlert from './Pages/Components/CustomAlert';
 import { Profile } from './Pages/Profile';
 import * as signalR from "@microsoft/signalr";
+import ProtectedRoute from './Pages/ProtectedRout';
 
 // Next Step(s):
 
 // For the video call room :
-// Create a dashboard to be able to share files 
-// share a canvas to type/draw
+// Create a dashboard to be able to share files -- done
+// share a canvas to type/draw 
 // screen sharing
 
 // For the website in general : 
-// Create the notifications system 
+// Create the notifications system -- done
 // Create a Profile page for users -- done
-// Fix the UI/UX design for the Main dashboard
+// Fix the UI/UX design for the Main dashboard 
 
 // More features :
 // Add a page where the user can view his friend's list -- done
-// Add the ability to block friends or remove them 
-// Add the ability to join a room via a link sent by the owner
+// Add the ability to block friends or remove them -- done
+// Add the ability to join a room via a link sent by the owner -- done
 // Add the ability to message friends -- done
-// Add group chat inside video call room
+// Add group chat inside video call room -- done
 // Add a custom alert module -- done
+
+// Logical issues:
+// UI is not being updated after certain events happen , like accepting a friend request or rejecting it 
+// In the group chat of a room we can't see who is sending the messages making it all that confusing
+
+
 
 
 // Debugging:
 // User names are not appearing in the friend request section or in friends list when creating a video call
 // Remote feeds are not visible during video calls
+
 
 const BASE_URL = import.meta.env.VITE_BASE_URL;
 
@@ -94,14 +102,19 @@ function App() {
         setIsLogged={setIsLogged}
         />
         <Routes>
-          <Route path="/" element={<Dashboard
+          <Route path="/dashboard" element={<Dashboard
           showAlert={showAlert}
           isLogged= {isLogged}
           setIsLogged={setIsLogged}
            />} />
-          <Route path="/videoCalling/:code" element={<VideoCalling showAlert={showAlert} />}/>
           <Route path="/roomDashboard" element={<RoomDashboard showAlert={showAlert} />} />
-          <Route path="/login" element={<Login showAlert={showAlert} />} />
+          <Route path="/videoCalling/:code" element={
+            <ProtectedRoute>
+              <VideoCalling showAlert={showAlert} />
+            </ProtectedRoute>
+            }/>
+  
+          <Route path="/" element={<Login showAlert={showAlert} />} />
           <Route path="/signup" element={<Signup showAlert={showAlert} />} />
           <Route path="/profile" element={<Profile showAlert={showAlert} />}/>
         </Routes>

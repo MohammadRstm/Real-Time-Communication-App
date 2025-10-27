@@ -176,8 +176,7 @@ namespace server_dotnet.Controllers
                 }
 
                 // Send Friend request
-
-                
+                await _userService.SendFriendRequest(targetedUser, userId);
 
                 return Ok(new {message = "Friend request send successfully"});
             }catch(Exception ex)
@@ -366,6 +365,23 @@ namespace server_dotnet.Controllers
             catch (Exception ex)
             {
                 return StatusCode(500, new { message = "Server error, please try again later", error = ex.Message });
+            }
+        }
+
+        [HttpPost("blockFriend/{friendId}")]
+        [Authorize]
+        public async Task<IActionResult> BlockFriend(string friendId)
+        {
+            try
+            {
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ??
+                                User.FindFirstValue(JwtRegisteredClaimNames.Sub);
+
+                await _userService.BlockFriend(userId, friendId);
+                return Ok(new { message = "Friend blocked" });
+            }catch(Exception ex)
+            {
+                return BadRequest(ex.Message);
             }
         }
 

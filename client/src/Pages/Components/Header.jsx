@@ -15,13 +15,13 @@ export function Header({ isLogged, setIsLogged }) {
   const handleLogout = () => {
     localStorage.removeItem("token");
     setIsLogged(false);
-    navigate("/login");
+    navigate("/");
   };
 
   const isActive = (path) => location.pathname === path;
 
   const navLinks = [
-    { name: "Dashboard", path: "/" },
+    { name: "Dashboard", path: "/dashboard" },
     { name: "Profile" , path : "/profile"}
   ];
 
@@ -56,7 +56,7 @@ export function Header({ isLogged, setIsLogged }) {
             </button>
           ) : (
             <Link
-              to="/login"
+              to="/"
               className={`font-medium transition-colors duration-200 ${
                 isActive("/login")
                   ? "text-blue-600"

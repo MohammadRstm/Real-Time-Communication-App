@@ -74,5 +74,29 @@ namespace server_dotnet.Controllers
                 return StatusCode(500, new { message = "Server error , please try again later", error = ex.Message });
             }
         }
+
+        [HttpPost("upload")]
+        [Authorize]
+        public async Task<IActionResult> UploadFile(IFormFile file)
+        {
+            if (file == null || file.Length == 0)
+                return BadRequest("No file uploaded.");
+
+            var uploadsPath = Path.Combine(Directory.GetCurrentDirectory(), "uploads");
+            if (!Directory.Exists(uploadsPath))
+                Directory.CreateDirectory(uploadsPath);
+
+            var uniqueName = $"{Guid.NewGuid()}_{file.FileName}";
+            var filePath = Path.Combine(uploadsPath, uniqueName);
+
+            using (var stream = new FileStream(filePath, FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+
+            var fileUrl = $"{Request.Scheme}://{Request.Host}/uploads/{uniqueName}";
+            return Ok(new { fileUrl, originalName = file.FileName });
+        }
+
     }
 }

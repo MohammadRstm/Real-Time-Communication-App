@@ -13,11 +13,14 @@ export function Dashboard({showAlert}) {
   const [searchInput, setSearchInput] = useState("");
   const [friendRequests, setFriendRequests] = useState([]);
   const [showFriendRequestModal, setShowFriendRequestModal] = useState(false);
-  const [socket, setSocket] = useState(null);
-
+  
   const token = localStorage.getItem("token");
-  if (!token) window.location.href = "/login";
-  const decoded = jwtDecode(token);
+  let decoded;
+  if(token) decoded = jwtDecode(token);
+
+  useEffect(() =>{
+    if (!token) window.location.href = "/";
+  } , []);
 
   const id = decoded.sub;
   const fullName = decoded.family_name;
@@ -38,6 +41,7 @@ export function Dashboard({showAlert}) {
   // }, []);
 
   useEffect(() => {
+    if(!token) return;
     const getFriendRequests = async () => {
       try {
         const response = await axios.get(`${BASE_URL}/api/user/friendRequests`, {

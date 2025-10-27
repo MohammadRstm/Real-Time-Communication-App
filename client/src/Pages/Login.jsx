@@ -1,11 +1,12 @@
 import axios from "axios";
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import displayError from "../utils/displayError";
 
 const BASE_URL = import.meta.env.VITE_BASE_URL;
 
 export function Login({showAlert}) {
+    const navigate = useNavigate();
     const [loginForm, setLoginForm] = useState({
         email: "",
         password: ""
@@ -34,9 +35,19 @@ export function Login({showAlert}) {
             const token = data.token;
             localStorage.setItem("token", token);
             showAlert("success" , "Login Successfull");
+
+            // redirect to video call room incase you joined through link
+            const params = new URLSearchParams(location.search);
+            if(params.get('redirect')){
+                localStorage.setItem("justLoggedIn" , true);
+                const redirectPath = params.get("redirect") || "/";
+                navigate(redirectPath);
+                return;
+            }
+
             // redirect to dashboard
             setTimeout(() => {
-            window.location.href = "/"; // dashboard
+            window.location.href = "/dashboard"; 
             }, 2000)
         } catch (err) {
            displayError(err , showAlert);
