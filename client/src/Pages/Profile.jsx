@@ -24,7 +24,7 @@ export function Profile({ showAlert }) {
     const queryString = window.location.search;
     const urlParams = new URLSearchParams(queryString);
     const otherUserId = urlParams.get("id");
-    if (otherUserId) setOtherUser(otherUserId);
+    if (otherUserId) setOtherUser(otherUserId);// access profile page of another user
 
     try {
       let response;
@@ -55,6 +55,10 @@ export function Profile({ showAlert }) {
 
   useEffect(() => {
     const token = localStorage.getItem("token");
+    if(!token){
+      showAlert("info" , "Please login again, your token has expired");
+      return;
+    }
     fetchUserInfo(token);
   }, []);
 
@@ -74,7 +78,10 @@ export function Profile({ showAlert }) {
   const changeProfilePic = async () => {
     if (!selectedFile) return showAlert("error", "Please select a file first");
     const token = localStorage.getItem("token");
-
+    if(!token){
+      showAlert("info" , "Please login again, your token has expired");
+      return;
+    }
     try {
       const formData = new FormData();
       formData.append("file", selectedFile);
@@ -106,6 +113,10 @@ export function Profile({ showAlert }) {
 
   const submitChanges = async () => {
     const token = localStorage.getItem("token");
+    if(!token){
+      showAlert("info" , "Please login again, your token has expired");
+      return;
+    }
     try {
       await axios.put(`${BASE_URL}/api/user/updateInfo`, editProfileForm, {
         headers: { Authorization: `Bearer ${token}` },
@@ -122,7 +133,10 @@ export function Profile({ showAlert }) {
   const handleBlockFriend = async () => {
     if (!friendToBlock) return;
     const token = localStorage.getItem("token");
-
+    if(!token){
+      showAlert("info" , "Please login again, your token has expired");
+      return;
+    }
     try {
       await axios.post(
         `${BASE_URL}/api/user/blockFriend/${friendToBlock.id}`,

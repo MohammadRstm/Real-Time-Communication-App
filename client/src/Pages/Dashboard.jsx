@@ -25,23 +25,11 @@ export function Dashboard({showAlert}) {
   const id = decoded.sub;
   const fullName = decoded.family_name;
 
-  // useEffect(() => {
-  //   if (!token) return;
-  //   const socketConn = io(`${BASE_URL}`, { query: { userId: id } });
-  //   setSocket(socketConn);
-
-  //   socketConn.on("friend-request", (data) => {
-  //     setFriendRequests((prev) => [
-  //       ...prev,
-  //       { _id: data.from, fullName: data.fullName, email: data.email },
-  //     ]);
-  //   });
-
-  //   return () => socketConn.disconnect();
-  // }, []);
-
   useEffect(() => {
-    if(!token) return;
+    if(!token){
+      showAlert("info" , "Please login again, your token has expired");
+      return;
+    } 
     const getFriendRequests = async () => {
       try {
         const response = await axios.get(`${BASE_URL}/api/user/friendRequests`, {
@@ -56,6 +44,10 @@ export function Dashboard({showAlert}) {
   }, []);
 
   const displaySuggestions = async () => {
+    if(!token){
+      showAlert("info" , "Please login again, your token has expired");
+      return;
+    } 
     if (!searchInput.trim()) return;
     try {
       const response = await axios.get(`${BASE_URL}/api/user/suggestions/${searchInput}`, {
@@ -75,6 +67,10 @@ export function Dashboard({showAlert}) {
   };
 
   const sendFriendRequest = async (userId) => {
+    if(!token){
+      showAlert("info" , "Please login again, your token has expired");
+      return;
+    } 
     try {
       await axios.post(`${BASE_URL}/api/user/sendFreindRequest/${userId}`, {}, {
         headers: { Authorization: `Bearer ${token}` },
@@ -86,6 +82,10 @@ export function Dashboard({showAlert}) {
   };
 
   const acceptFriendRequest = async (requestId) => {
+    if(!token){
+      showAlert("info" , "Please login again, your token has expired");
+      return;
+    } 
     try {
       await axios.post(`${BASE_URL}/api/user/acceptFriendRequest/${requestId}`, {}, {
         headers: { Authorization: `Bearer ${token}` },
@@ -98,6 +98,10 @@ export function Dashboard({showAlert}) {
   };
 
   const rejectFriendRequest = async (requestId) => {
+    if(!token){
+      showAlert("info" , "Please login again, your token has expired");
+      return;
+    } 
     try {
       await axios.post(`${BASE_URL}/api/user/rejectFriendRequest/${requestId}`, {}, {
         headers: { Authorization: `Bearer ${token}` },

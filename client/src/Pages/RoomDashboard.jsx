@@ -13,11 +13,13 @@ export function RoomDashboard({showAlert}) {
   const [roomCodeInput, setRoomCodeInput] = useState("");
   const [newRoomData, setNewRoomData] = useState(null);
 
-  const token = localStorage.getItem("token");
-  if (!token) window.location.href = "/login";
-  const { id } = jwtDecode(token);
 
   const getAllFriends = async () => {
+    const token = localStorage.getItem("token");
+    if(!token){
+      showAlert("info" , "Please login again, your token has expired");
+      return;
+    }
     try {
       const response = await axios.get(`${BASE_URL}/api/user/friends`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -29,6 +31,11 @@ export function RoomDashboard({showAlert}) {
   };
 
   const createRoom = async () => {
+    const token = localStorage.getItem("token");
+    if(!token){
+      showAlert("info" , "Please login again, your token has expired");
+      return;
+    }
     try {
       const response = await axios.post(`${BASE_URL}/api/room/create`, {}, {
         headers: { Authorization: `Bearer ${token}` },
