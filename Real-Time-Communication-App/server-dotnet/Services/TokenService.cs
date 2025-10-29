@@ -32,7 +32,7 @@ public class TokenService
             issuer: _issuer,
             audience: _audience,
             claims: claims,
-            expires: DateTime.UtcNow.AddMinutes(60),
+            expires: DateTime.UtcNow.AddDays(1),// 24 hours for token renewel
             signingCredentials: creds
         );
 
