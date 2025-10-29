@@ -8,7 +8,7 @@ namespace server_dotnet.Hubs
     [Authorize]
     public class VideoGroupChatHub : Hub
     {
-        public override async Task OnConnectedAsync()
+       public override async Task OnConnectedAsync()
         {
             await base.OnConnectedAsync();
         }

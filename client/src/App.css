@@ -1,0 +1,10 @@
+.video-element {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* When in fullscreen, use contain to maintain aspect ratio */
+.fullscreen-video {
+  object-fit: contain !important;
+}

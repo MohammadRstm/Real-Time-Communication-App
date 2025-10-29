@@ -75,7 +75,12 @@ builder.Services.AddAuthentication(options =>
             // Check if the request is for your ChatHub endpoint
             var path = context.HttpContext.Request.Path;
             if (!string.IsNullOrEmpty(accessToken) &&
-                (path.StartsWithSegments("/chatHub") || path.StartsWithSegments("/videoHub") || path.StartsWithSegments("/notificationHub") || path.StartsWithSegments("/videoGroupChatHub")))
+                (path.StartsWithSegments("/chatHub")
+                || path.StartsWithSegments("/videoHub")
+                || path.StartsWithSegments("/notificationHub")
+                || path.StartsWithSegments("/videoGroupChatHub")
+                || path.StartsWithSegments("/canvasHub")
+                ))
             {
                 context.Token = accessToken;
             }
@@ -138,6 +143,7 @@ app.MapHub<VideoHub>("/videoHub");
 app.MapHub<ChatHub>("/chatHub").RequireAuthorization();
 app.MapHub<NotificationHub>("/notificationHub").RequireAuthorization();
 app.MapHub<VideoGroupChatHub>("/videoGroupChatHub").RequireAuthorization();
+app.MapHub<CanvasDrawingHub>("/canvasHub").RequireAuthorization();
 
 
 app.Run();

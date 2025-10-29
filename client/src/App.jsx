@@ -16,13 +16,13 @@ import ProtectedRoute from './Pages/ProtectedRout';
 
 // For the video call room :
 // Create a dashboard to be able to share files -- done
-// share a canvas to type/draw 
-// screen sharing
+// share a canvas to draw -- done
+// screen sharing -- done
 
 // For the website in general : 
 // Create the notifications system -- done
 // Create a Profile page for users -- done
-// Fix the UI/UX design for the Main dashboard 
+// Fix the UI/UX design for the Main dashboard -- done
 
 // More features :
 // Add a page where the user can view his friend's list -- done
@@ -31,17 +31,18 @@ import ProtectedRoute from './Pages/ProtectedRout';
 // Add the ability to message friends -- done
 // Add group chat inside video call room -- done
 // Add a custom alert module -- done
+// Video call invites after user creates a room
 
 // Logical issues:
 // UI is not being updated after certain events happen , like accepting a friend request or rejecting it 
 // In the group chat of a room we can't see who is sending the messages making it all that confusing
-
-
+// Once the video call is ended the room code must be deleted from the database
 
 
 // Debugging:
 // User names are not appearing in the friend request section or in friends list when creating a video call
 // Remote feeds are not visible during video calls
+// Canvas drawings are not accurate to mouse movement
 
 
 const BASE_URL = import.meta.env.VITE_BASE_URL;

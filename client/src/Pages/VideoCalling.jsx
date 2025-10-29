@@ -6,7 +6,12 @@ import axios from "axios";
 import { jwtDecode } from "jwt-decode";
 import { FileTextIcon, MessageSquare } from "lucide-react";
 import GroupChat from "./Components/GroupChat";
-import { FileText } from "lucide-react"; 
+import { PhoneOff } from "lucide-react";
+import { PenTool } from "lucide-react";
+import DrawingCanvas from "./Components/DrawingCanvas";
+import { ConsoleLogger } from "@microsoft/signalr/dist/esm/Utils";
+import VideoContainer from "./Components/VideoContainer";
+
 
 
 const RTC_CONFIG = {
@@ -55,9 +60,16 @@ export function VideoCalling() {
   const [localStream, setLocalStream] = useState(null);
   const [remoteStreams, setRemoteStreams] = useState(new Map());
   const [connectionId, setConnectionId] = useState(null);
+  const [screenStream, setScreenStream] = useState(null);
+
   // side bar options
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
+
+  // canvas
+  const [showCanvas, setShowCanvas] = useState(false);
+  const [remoteDrawData, setRemoteDrawData] = useState(null);
+  const [canvasHistory , setCanvasHistory] = useState([]);
 
 
   const localVideoRef = useRef(null);
@@ -66,6 +78,7 @@ export function VideoCalling() {
   const pendingCandidatesRef = useRef(new Map()); // peerId -> [candidate...]
   const connectionRef = useRef(null); // SignalR HubConnection
   const groupChatRef = useRef(null); // Group Chat HubConnection
+  const canvasDrawingRef = useRef(null);// Canvas Chat HubConnection
 
   const [messages , setMessages] = useState([]);
   const [currentUserId , setCurrentUserId] = useState(null);
@@ -83,7 +96,7 @@ export function VideoCalling() {
     const token = localStorage.getItem("token");
     if(!token) return;
     const payload = jwtDecode(token);
-    setCurrentUserId(payload.sub);
+    setCurrentUserId(payload.sub);// used to decide message's side
     const connection = new signalR.HubConnectionBuilder()
           .withUrl(`${BASE_URL}/videoGroupChatHub`, {
             accessTokenFactory: () => token,
@@ -116,6 +129,41 @@ export function VideoCalling() {
       connection.stop();
     };
   } , []);
+
+  // Canvas connection
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if(!token) return;
+    const connection = new signalR.HubConnectionBuilder()
+      .withUrl(`${BASE_URL}/canvasHub`,{
+        accessTokenFactory : () => token,
+        transport: signalR.HttpTransportType.WebSockets,
+        skipNegotiation: true,
+      })
+      .build();
+    canvasDrawingRef.current = connection;
+
+    connection.start().then(() =>{
+      connection.invoke("JoinRoom" , code)
+        .then(() => console.log("Canvas Room Joined"))
+        .catch((err) => console.log("Canvas Join error :" , err));
+      console.log("✅ CanvasHub connected")
+    }).catch((err) => console.log("Canvas connection error" , err));
+
+    // Listen for incoming drawing data
+    connection.on("ReceiveCanvasData", (data) => {
+      setRemoteDrawData(data); 
+    });
+
+    connection.on("Error", (errorMsg) => {
+      console.error("Canvas Drawing error:", errorMsg);
+    });
+
+    return () => {
+      connection.invoke("LeaveRoom" , code).catch(() => {});
+      connection.stop();
+    };
+  }, []);
 
   // if this load is a *page reload*, redirect to dashboard
   useEffect(() => {
@@ -544,6 +592,71 @@ export function VideoCalling() {
       }
     }
   };
+  // Start screen share
+  const startScreenShare = async () => {
+    if (!connectionRef.current) return;
+
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { cursor: "always" },
+        audio: false
+      });
+
+      setScreenStream(stream);
+
+      const screenVideoTrack = stream.getVideoTracks()[0];
+
+      // Replace video track in all peers
+      peersRef.current.forEach(pc => {
+        const sender = pc.getSenders().find(s => s.track?.kind === "video");
+        if (sender) sender.replaceTrack(screenVideoTrack);
+      });
+
+      // Update local preview
+      if (localVideoRef.current) {
+        const previewStream = new MediaStream([screenVideoTrack, ...localStreamRef.current.getAudioTracks()]);
+        localVideoRef.current.srcObject = previewStream;
+      }
+
+      // Listen for user manually stopping screen share via browser UI
+      const handleStop = () => {
+        stopScreenShare();
+      };
+
+      screenVideoTrack.onended = handleStop;
+
+      // Extra safeguard: in case all tracks are ended
+      stream.getTracks().forEach(track => track.addEventListener('ended', handleStop));
+
+    } catch (err) {
+      console.error("Screen sharing failed:", err);
+    }
+  };
+  // Stop screen share
+  const stopScreenShare = () => {
+    if (!screenStream) return;
+
+    // Restore camera video track
+    const cameraVideoTrack = localStreamRef.current?.getVideoTracks()[0];
+    if (cameraVideoTrack) {
+      peersRef.current.forEach(pc => {
+        const sender = pc.getSenders().find(s => s.track?.kind === "video");
+        if (sender) sender.replaceTrack(cameraVideoTrack);
+      });
+
+      // Update local preview using a cloned camera stream
+      if (localVideoRef.current) {
+        const previewStream = new MediaStream([cameraVideoTrack, ...localStreamRef.current.getAudioTracks()]);
+        localVideoRef.current.srcObject = previewStream;
+      }
+    }
+
+    // Stop screen stream tracks
+    screenStream.getTracks().forEach(track => track.stop());
+    setScreenStream(null);
+  };
+
+
 
  return (
   <div className="relative flex flex-col min-h-screen bg-gray-900 text-white overflow-x-hidden pt-16">
@@ -574,20 +687,70 @@ export function VideoCalling() {
       </div>
     )}
 
+    {/* Bottom Menu Bar */}
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center justify-center bg-gray-800 bg-opacity-80 rounded-full px-6 py-3 space-x-6 shadow-lg backdrop-blur-sm z-40">
+    {/* Leave Call */}
+    <button
+      onClick={() => {
+        leaveRoom();
+        navigate("/roomDashboard");
+      }}
+      className="bg-red-600 hover:bg-red-700 text-white p-3 rounded-full shadow-md transition-transform transform hover:scale-110"
+      title="Leave Call"
+    >
+        <PhoneOff className="w-6 h-6" />
+    </button>
+
+    {/* Screen Share */}
+    <button
+     onClick={() => {
+        if (screenStream) stopScreenShare();
+        else startScreenShare();
+      }}
+      className="bg-gray-700 hover:bg-gray-600 text-white p-3 rounded-full shadow-md transition-transform transform hover:scale-110"
+      title="Screen Share"
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        className="h-6 w-6"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={2}
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M9.75 17h4.5M4 5h16v10H4V5zm16 10v4H4v-4"
+        />
+      </svg>
+    </button>
+
+    {/* Canvas */}
+    <button
+      onClick={() => setShowCanvas(true)}
+      className="bg-gray-700 hover:bg-gray-600 text-white p-3 rounded-full shadow-md transition-transform transform hover:scale-110"
+      title="Open Canvas"
+    >
+      <PenTool className="w-6 h-6" />
+      </button>
+    </div>
+
+
     {/* Main video area */}
     <main className="flex-1 flex flex-col items-center justify-center p-4 relative">
       {roomVerified ? (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 justify-center w-full max-w-6xl">
             {/* Local video */}
-            <div className="relative rounded-xl overflow-hidden shadow-lg border-2 border-blue-500 w-64 h-48">
+              <VideoContainer label="You">
               {localStream && localStream.getVideoTracks().length > 0 ? (
                 <video
                   ref={localVideoRef}
                   autoPlay
                   muted
                   playsInline
-                  className="w-full h-full object-cover"
+                  className="w-full h-full"
                 />
               ) : (
                 <div className="w-full h-full bg-gray-800 flex items-center justify-center">
@@ -597,10 +760,7 @@ export function VideoCalling() {
                   </div>
                 </div>
               )}
-              <div className="absolute bottom-2 left-2 bg-blue-500 text-xs px-2 py-1 rounded">
-                You
-              </div>
-            </div>
+            </VideoContainer>
 
             {/* Remote videos */}
             {[...remoteStreams.entries()].map(([peerId, stream]) => (
@@ -688,6 +848,21 @@ export function VideoCalling() {
         />
       </div>
     </aside>
+
+    {showCanvas && (
+      <DrawingCanvas
+      setShowCanvas={setShowCanvas}
+      onDraw={(data) => {
+        if(canvasDrawingRef.current){
+          canvasDrawingRef.current.invoke("SendCanvasData" ,code, data);
+        }
+        setCanvasHistory((prev) => [...prev, data]);
+      }}
+      strokes={canvasHistory}
+      setStrokes={setCanvasHistory}
+      remoteDrawData={remoteDrawData}
+      />
+    )}
   </div>
 );
 
@@ -722,7 +897,7 @@ function RemoteVideo({ stream, peerId }) {
   const hasAudio = stream && stream.getAudioTracks().length > 0;
 
   return (
-    <div className="relative rounded-xl overflow-hidden shadow-lg border-2 border-green-500 w-64 h-48">
+    <VideoContainer label={`Remote ${peerId?.slice(0 , 6)}`}>
       {hasVideo ? (
         <video
           ref={videoRef}
@@ -740,14 +915,14 @@ function RemoteVideo({ stream, peerId }) {
       )}
 
       <audio ref={audioRef} autoPlay playsInline className="hidden" />
-
+      
       <div className="absolute bottom-2 left-2 bg-green-500 text-white text-xs px-2 py-1 rounded">
         Remote {hasAudio ? "🔊" : "🔇"} {hasVideo ? "📹" : "📵"}
       </div>
       <div className="absolute top-2 right-2 bg-gray-700 text-white text-xs px-2 py-1 rounded">
         {peerId?.slice(0, 6)}
       </div>
-    </div>
+    </VideoContainer>
   );
 }
 
