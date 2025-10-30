@@ -34,15 +34,23 @@ import ProtectedRoute from './Pages/ProtectedRout';
 // Video call invites after user creates a room
 
 // Logical issues:
-// UI is not being updated after certain events happen , like accepting a friend request or rejecting it 
+// UI is not being updated after certain events happen , like accepting a friend request or rejecting it -- done 
 // In the group chat of a room we can't see who is sending the messages making it all that confusing
 // Advise users to re-login once the token expires instead of showing a server error -- done
 // When all users leave the room, it & all its files must be deleted form the server/db -- done
 
 // Debugging:
-// User names are not appearing in the friend request section or in friends list when creating a video call
+// User names are not appearing in the friend request section or in friends list in friend request/search card -- done
 // Remote feeds are not visible during video calls
 // Canvas drawings are not accurate to mouse movement
+
+// Testing :
+// Main Dashboard -- done
+// Login -- done
+// Signup -- done
+// Profile
+// VideoCallRoom
+// Room Dashboard
 
 
 const BASE_URL = import.meta.env.VITE_BASE_URL;

@@ -31,12 +31,11 @@ namespace server_dotnet.Services
         }
 
         // Get users based on search string (suggestions)
-        public async Task<List<object>> GetUserSuggestions(string searchString)
+        public async Task<List<object>> GetUserSuggestions(string searchString , string currentUser)
         {
             try
             {
-            var users = await _users.Find(u => u.FullName.ToLower().Contains(searchString.ToLower()))
-                .Project(u => new { u.Id, u.FullName, u.Email })
+            var users = await _users.Find(u => u.FullName.ToLower().Contains(searchString.ToLower()) && u.Id != currentUser)
                 .ToListAsync();
             return users.Cast<object>().ToList();
             }catch(Exception ex)

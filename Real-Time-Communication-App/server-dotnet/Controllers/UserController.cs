@@ -140,9 +140,13 @@ namespace server_dotnet.Controllers
         {
             try
             {
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ??
+                         User.FindFirstValue(JwtRegisteredClaimNames.Sub);
+
                 if (string.IsNullOrEmpty(searchString)) return Ok(new List<object>());
 
-                var users = await _userService.GetUserSuggestions(searchString);
+                var users = await _userService.GetUserSuggestions(searchString , userId);
+
 
                 return Ok(users);
             }catch (Exception ex)
@@ -197,7 +201,13 @@ namespace server_dotnet.Controllers
                 var userData = await _userService.GetUserById(userId);
                 if(userData != null)
                 {
-                    return Ok(userData.FriendRequests);
+                    var FriendRequestsDetails = await Task.WhenAll(
+                       userData.FriendRequests.Select(async friendReqId =>
+                       {
+                           return await _userService.GetUserById(friendReqId.From);
+                       })
+                   );
+                    return Ok(FriendRequestsDetails);
                 }
                 else
                 {
@@ -223,6 +233,7 @@ namespace server_dotnet.Controllers
             }
             catch(Exception ex)
             {
+                Console.WriteLine("Error accepting friend request: " + ex.Message);
                 return StatusCode(500, new { message = "Server error , please try again later", error = ex.Message });
             }
         }
