@@ -49,6 +49,12 @@ namespace server_dotnet.Services
         {
             return await _rooms.Find(r => r.RoomCode == code).FirstOrDefaultAsync();
         }
+
+        // Delete room
+        public async Task DeleteRoom(string code)
+        {
+            await _rooms.DeleteOneAsync(r => r.RoomCode == code);
+        }
     }
 }
 

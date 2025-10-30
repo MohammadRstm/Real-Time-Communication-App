@@ -98,5 +98,19 @@ namespace server_dotnet.Controllers
             return Ok(new { fileUrl, originalName = file.FileName });
         }
 
+        [Authorize]
+        [HttpDelete("deleteRoom/{code}")]
+        public async Task<IActionResult> DeleteRoom(string code)
+        {
+            try
+            {
+                await _roomService.DeleteRoom(code);
+                return Ok("Room Deleted");
+            }catch(Exception ex)
+            {
+                return BadRequest("Server error " + ex.Message);
+            }
+        }
+
     }
 }

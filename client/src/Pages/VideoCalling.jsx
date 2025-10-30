@@ -480,6 +480,20 @@ export function VideoCalling() {
           }
         }
       })();
+      // delete page code 
+      const deleteVideoCode = async() =>{
+        const token = localStorage.getItem('token');
+        try{
+          await axios.delete(`${BASE_URL}/api/room/deleteRoom/${code}` , {
+            headers:{
+              Authorization:`Bearer ${token}`
+            }
+          });
+        }catch(err){
+          return;
+        };
+      };
+      deleteVideoCode();
     };
   }, [roomVerified, code]);
   // clone stream to gurantee local stream appearing
