@@ -55,6 +55,29 @@ namespace server_dotnet.Services
         {
             await _rooms.DeleteOneAsync(r => r.RoomCode == code);
         }
+
+        // Delete Files that were sent during the room
+        public async Task DeleteRoomGroupCallFiles(string code)
+        {
+            var uploadsPath = Path.Combine(Directory.GetCurrentDirectory(), "uploads");
+            if (Directory.Exists(uploadsPath))
+            {
+                // Find all files that start with the room code + "_"
+                var roomFiles = Directory.GetFiles(uploadsPath, $"{code}_*");
+
+                foreach (var file in roomFiles)
+                {
+                    try
+                    {
+                        System.IO.File.Delete(file);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Failed to delete file {file}: {ex.Message}");
+                    }
+                }
+            }
+        }
     }
 }
 

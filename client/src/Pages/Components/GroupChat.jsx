@@ -19,7 +19,7 @@ function GroupChat({ code, groupChatRef, messages, currentUserId }) {
 
       const token = localStorage.getItem('token');
 
-      const response = await axios.post(`${BASE_URL}/api/room/upload`, formData, {
+      const response = await axios.post(`${BASE_URL}/api/room/upload/${code}`, formData, {
         headers: {
             Authorization : `Bearer ${token}`
         },

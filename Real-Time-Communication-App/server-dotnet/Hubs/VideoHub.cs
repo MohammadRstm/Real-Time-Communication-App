@@ -1,13 +1,26 @@
 ﻿using Microsoft.AspNetCore.SignalR;
+using MongoDB.Driver.Core.Connections;
+using server_dotnet.Services;
 using System.Collections.Concurrent;
 
 namespace server_dotnet.Hubs
 {
     public class VideoHub : Hub
     {
+        // ConnectedUsers -> set of connected users to each room 
+        private static readonly Dictionary<string, HashSet<string>> RoomUsers = new();
+
         // roomId -> set of connectionIds
         private static readonly ConcurrentDictionary<string, HashSet<string>> _rooms
             = new ConcurrentDictionary<string, HashSet<string>>();
+
+        // Room Serivice
+        private readonly RoomService _roomService;
+
+        public VideoHub(RoomService roomService)
+        {
+            _roomService = roomService;
+        }
 
         public override async Task OnConnectedAsync()
         {
@@ -24,6 +37,14 @@ namespace server_dotnet.Hubs
         public async Task JoinRoom(string roomId)
         {
             if (string.IsNullOrWhiteSpace(roomId)) return;
+
+            // Create a list of users connected to current room
+            var connectedUser = Context.ConnectionId;
+            if (!RoomUsers.ContainsKey(roomId))
+            {
+                RoomUsers[roomId] = new HashSet<string>(); 
+            }
+            RoomUsers[roomId].Add(connectedUser);
 
             // Add connection to SignalR group
             await Groups.AddToGroupAsync(Context.ConnectionId, roomId);
@@ -57,6 +78,22 @@ namespace server_dotnet.Hubs
         public async Task LeaveRoom(string roomId)
         {
             if (string.IsNullOrWhiteSpace(roomId)) return;
+
+            // remove user from room's list of connected users 
+            var connectedUser = Context.ConnectionId;
+            if(RoomUsers.TryGetValue(roomId , out var users))
+            {
+                users.Remove(connectedUser);
+                if(users.Count == 0)
+                {
+                    // no users left — delete room 
+                    await _roomService.DeleteRoom(roomId);
+                    // delete files sent during room 
+                    await _roomService.DeleteRoomGroupCallFiles(roomId);
+
+                    RoomUsers.Remove(roomId);
+                }
+            }
 
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, roomId);
 

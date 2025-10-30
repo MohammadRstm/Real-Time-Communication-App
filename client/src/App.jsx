@@ -36,8 +36,8 @@ import ProtectedRoute from './Pages/ProtectedRout';
 // Logical issues:
 // UI is not being updated after certain events happen , like accepting a friend request or rejecting it 
 // In the group chat of a room we can't see who is sending the messages making it all that confusing
-// Once the video call is ended the room code must be deleted from the database
 // Advise users to re-login once the token expires instead of showing a server error -- done
+// When all users leave the room, it & all its files must be deleted form the server/db -- done
 
 // Debugging:
 // User names are not appearing in the friend request section or in friends list when creating a video call
