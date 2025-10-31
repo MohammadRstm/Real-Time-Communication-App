@@ -304,8 +304,6 @@ export function Dashboard({ showAlert }) {
           </div>
         </div>
       )}
-
-
     </div>
   );
 }

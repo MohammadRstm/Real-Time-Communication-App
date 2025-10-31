@@ -48,9 +48,13 @@ import ProtectedRoute from './Pages/ProtectedRout';
 // Main Dashboard -- done
 // Login -- done
 // Signup -- done
-// Profile
+// Profile -- done
 // VideoCallRoom
 // Room Dashboard
+// Chat Widget component
+// Header -- done
+// Custom Alert component -- done
+
 
 
 const BASE_URL = import.meta.env.VITE_BASE_URL;

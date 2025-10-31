@@ -2,6 +2,7 @@ import axios from "axios";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import displayError from "../utils/displayError";
+import AnimateBackGround from "./Components/AnimateBackGround";
 
 const BASE_URL = import.meta.env.VITE_BASE_URL;
 
@@ -55,10 +56,11 @@ export function Login({showAlert}) {
     };
 
     return (
-        <div className="flex items-center justify-center min-h-screen bg-gray-100">
+        <div className="relativ min-h-screen flex items-center justify-center overflow-hidden">
+            <AnimateBackGround />
             <form
                 onSubmit={submitForm}
-                className="bg-white p-8 rounded-xl shadow-md w-full max-w-sm"
+                  className="bg-transparent backdrop-blur-md p-8 rounded-xl shadow-lg w-full max-w-sm border border-white/20"
             >
                 <h2 className="text-2xl font-semibold mb-6 text-center">Login</h2>
 

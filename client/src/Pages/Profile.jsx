@@ -16,7 +16,6 @@ export function Profile({ showAlert }) {
     photo_url: "",
   });
 
-  // New states
   const [searchTerm, setSearchTerm] = useState("");
   const [friendToBlock, setFriendToBlock] = useState(null);
 
@@ -24,24 +23,17 @@ export function Profile({ showAlert }) {
     const queryString = window.location.search;
     const urlParams = new URLSearchParams(queryString);
     const otherUserId = urlParams.get("id");
-    if (otherUserId) setOtherUser(otherUserId);// access profile page of another user
+    if (otherUserId) setOtherUser(otherUserId);
 
     try {
-      let response;
-      if (otherUserId) {
-        response = await axios.get(
-          `${BASE_URL}/api/user/getUserDetails/${otherUserId}`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
-      } else {
-        response = await axios.get(`${BASE_URL}/api/user/getUserDetails`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-      }
+      const endpoint = otherUserId
+        ? `${BASE_URL}/api/user/getUserDetails/${otherUserId}`
+        : `${BASE_URL}/api/user/getUserDetails`;
 
-      const data = response.data;
+      const { data } = await axios.get(endpoint, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
       setUserInfo(data);
       setEditProfileForm({
         bio: data.profile?.bio || "",
@@ -55,8 +47,8 @@ export function Profile({ showAlert }) {
 
   useEffect(() => {
     const token = localStorage.getItem("token");
-    if(!token){
-      showAlert("info" , "Please login again, your token has expired");
+    if (!token) {
+      showAlert("info", "Please login again, your token has expired");
       return;
     }
     fetchUserInfo(token);
@@ -78,15 +70,15 @@ export function Profile({ showAlert }) {
   const changeProfilePic = async () => {
     if (!selectedFile) return showAlert("error", "Please select a file first");
     const token = localStorage.getItem("token");
-    if(!token){
-      showAlert("info" , "Please login again, your token has expired");
+    if (!token) {
+      showAlert("info", "Please login again, your token has expired");
       return;
     }
     try {
       const formData = new FormData();
       formData.append("file", selectedFile);
 
-      const response = await axios.post(
+      const { data } = await axios.post(
         `${BASE_URL}/api/user/uploadProfilePhoto`,
         formData,
         {
@@ -100,11 +92,11 @@ export function Profile({ showAlert }) {
       showAlert("success", "Profile picture updated");
       setEditProfileForm((prev) => ({
         ...prev,
-        photo_url: response.data.filePath,
+        photo_url: data.filePath,
       }));
       setUserInfo((prev) => ({
         ...prev,
-        profile: { ...prev.profile, picture_url: response.data.filePath },
+        profile: { ...prev.profile, picture_url: data.filePath },
       }));
     } catch (err) {
       displayError(err, showAlert);
@@ -113,8 +105,8 @@ export function Profile({ showAlert }) {
 
   const submitChanges = async () => {
     const token = localStorage.getItem("token");
-    if(!token){
-      showAlert("info" , "Please login again, your token has expired");
+    if (!token) {
+      showAlert("info", "Please login again, your token has expired");
       return;
     }
     try {
@@ -122,7 +114,6 @@ export function Profile({ showAlert }) {
         headers: { Authorization: `Bearer ${token}` },
       });
       showAlert("success", "Profile updated successfully");
-
       fetchUserInfo(token);
       setIsInEditMode(false);
     } catch (err) {
@@ -133,8 +124,8 @@ export function Profile({ showAlert }) {
   const handleBlockFriend = async () => {
     if (!friendToBlock) return;
     const token = localStorage.getItem("token");
-    if(!token){
-      showAlert("info" , "Please login again, your token has expired");
+    if (!token) {
+      showAlert("info", "Please login again, your token has expired");
       return;
     }
     try {
@@ -143,18 +134,17 @@ export function Profile({ showAlert }) {
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
-
       showAlert("success", `${friendToBlock.fullName} has been blocked`);
       setFriendToBlock(null);
-      fetchUserInfo(token); // refresh friends list
+      fetchUserInfo(token);
     } catch (err) {
       displayError(err, showAlert);
     }
   };
 
   const filteredFriends =
-    userInfo?.friends?.filter((friend) =>
-      friend.fullName.toLowerCase().includes(searchTerm.toLowerCase())
+    userInfo?.friends?.filter((f) =>
+      f.fullName.toLowerCase().includes(searchTerm.toLowerCase())
     ) || [];
 
   if (!userInfo)
@@ -165,7 +155,7 @@ export function Profile({ showAlert }) {
     );
 
   return (
-    <div className="min-h-screen bg-gray-100 flex justify-center py-12 px-4 relative">
+    <div className="min-h-screen bg-gray-100 flex justify-center py-12 px-4">
       {/* Block Confirmation Modal */}
       {friendToBlock && (
         <div className="fixed inset-0 flex justify-center items-center bg-black bg-opacity-40 z-50">
@@ -185,7 +175,7 @@ export function Profile({ showAlert }) {
               </button>
               <button
                 onClick={() => setFriendToBlock(null)}
-                className="bg-gray-300 text-gray-700 px-4- py-2 rounded-lg hover:bg-gray-400 transition"
+                className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition"
               >
                 Cancel
               </button>
@@ -194,20 +184,56 @@ export function Profile({ showAlert }) {
         </div>
       )}
 
-      <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-3xl relative mt-8">
-        {/* Edit Profile Button - Top Right Corner */}
-        {!otherUser && !isInEditMode && (
-          <button
-            onClick={() => setIsInEditMode(true)}
-            className="absolute top-4 right-4 p-2 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 transition shadow-md"
-            title="Edit Profile"
-          >
-            <FiEdit2 className="text-lg" />
-          </button>
+      {/* Main Card */}
+      <div className="relative bg-white rounded-2xl shadow-lg p-8 w-full max-w-3xl mt-8">
+        {/* Floating Edit / Save Buttons */}
+        {!otherUser && (
+          <div className="absolute top-4 right-4 flex items-center gap-2 z-50">
+            {/* Edit icon */}
+            <button
+              onClick={() => setIsInEditMode(true)}
+              className={`p-2 absolute -right-3 -top-3 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 shadow-md transform transition-all duration-300 ${
+                isInEditMode
+                  ? "translate-x-20 opacity-0 pointer-events-none"
+                  : "translate-x-0 opacity-100"
+              }`}
+              title="Edit Profile"
+            >
+              <FiEdit2 className="text-lg" />
+            </button>
+
+            {/* Action buttons */}
+            <div
+              className={`flex items-center gap-2 transition-all duration-500 ${
+                isInEditMode
+                  ? "translate-x-0 opacity-100"
+                  : "translate-x-20 opacity-0 pointer-events-none"
+              }`}
+            >
+              <button
+                onClick={submitChanges}
+                className="flex items-center gap-1 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+              >
+                <FiCheck /> Save
+              </button>
+              <button
+                onClick={() => setIsInEditMode(false)}
+                className="flex items-center gap-1 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
+              >
+                <FiX /> Cancel
+              </button>
+              <button
+                onClick={changeProfilePic}
+                className="flex items-center gap-1 px-3 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition"
+              >
+                <FiCamera /> Upload
+              </button>
+            </div>
+          </div>
         )}
 
         <div className="flex flex-col md:flex-row gap-8">
-          {/* Profile Picture Section - Left */}
+          {/* Profile Picture */}
           <div className="flex flex-col items-center md:items-start">
             <div className="relative">
               <img
@@ -232,14 +258,13 @@ export function Profile({ showAlert }) {
               )}
             </div>
 
-            {/* Name & Email - Below profile picture on mobile, to the right on desktop */}
             <div className="mt-4 text-center md:text-left">
               {isInEditMode ? (
                 <input
                   name="fullName"
                   value={editProfileForm.fullName}
                   onChange={handleChange}
-                  className="text-2xl font-bold text-center md:text-left border-b-2 border-gray-300 focus:border-indigo-600 outline-none w-full"
+                  className="text-2xl font-bold border-b-2 border-gray-300 focus:border-indigo-600 outline-none w-full"
                 />
               ) : (
                 <h1 className="text-2xl font-bold text-gray-800">
@@ -250,9 +275,9 @@ export function Profile({ showAlert }) {
             </div>
           </div>
 
-          {/* Bio and Friends Section - Right */}
+          {/* Bio + Friends */}
           <div className="flex-1">
-            {/* Bio Section */}
+            {/* Bio */}
             <div className="mb-8">
               <h2 className="text-lg font-semibold text-gray-700 mb-3">Bio</h2>
               {isInEditMode ? (
@@ -260,7 +285,7 @@ export function Profile({ showAlert }) {
                   name="bio"
                   value={editProfileForm.bio}
                   onChange={handleChange}
-                  className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full border rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none"
                   rows="3"
                 />
               ) : (
@@ -271,13 +296,11 @@ export function Profile({ showAlert }) {
               )}
             </div>
 
-            {/* Friends Section */}
+            {/* Friends */}
             <div>
               <h2 className="text-lg font-semibold text-gray-700 mb-4">
                 Friends
               </h2>
-
-              {/* Search Bar */}
               <div className="relative mb-4">
                 <FiSearch className="absolute left-3 top-3 text-gray-500" />
                 <input
@@ -285,18 +308,17 @@ export function Profile({ showAlert }) {
                   placeholder="Search friends..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                 />
               </div>
 
               {filteredFriends.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   {filteredFriends.map((friend, i) => (
                     <div
                       key={i}
-                      className="relative bg-gray-50 p-4 rounded-xl shadow-sm hover:shadow-md transition min-h-[120px]"
+                      className="relative flex items-center gap-4 bg-gray-50 border border-gray-200 rounded-xl shadow-sm hover:shadow-md p-4 transition-all"
                     >
-                      {/* Block Button */}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -308,27 +330,26 @@ export function Profile({ showAlert }) {
                         <FiX className="text-lg" />
                       </button>
 
-                      <div className="flex items-center gap-3">
-                        <img
-                          src={
-                            friend.profile?.pictureUrl
-                              ? `${BASE_URL}/uploads/${friend.profile.pictureUrl}`
-                              : "/anonymousProfilePicture.png"
-                          }
-                          alt={friend.fullName}
-                          className="w-12 h-12 rounded-full object-cover cursor-pointer flex-shrink-0"
-                          onClick={() =>
-                            (window.location.href = `/profile?id=${friend.id}`)
-                          }
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className="font-semibold text-sm truncate">
-                            {friend.fullName}
-                          </p>
-                          <p className="text-xs text-gray-500 truncate">
-                            {friend.email}
-                          </p>
-                        </div>
+                      <img
+                        src={
+                          friend.profile?.pictureUrl
+                            ? `${BASE_URL}/uploads/${friend.profile.pictureUrl}`
+                            : "/anonymousProfilePicture.png"
+                        }
+                        alt={friend.fullName}
+                        className="w-14 h-14 rounded-full object-cover cursor-pointer border border-gray-300"
+                        onClick={() =>
+                          (window.location.href = `/profile?id=${friend.id}`)
+                        }
+                      />
+
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-gray-800 truncate">
+                          {friend.fullName}
+                        </p>
+                        <p className="text-sm text-gray-500 truncate">
+                          {friend.email}
+                        </p>
                       </div>
                     </div>
                   ))}
@@ -341,30 +362,6 @@ export function Profile({ showAlert }) {
             </div>
           </div>
         </div>
-
-        {/* Edit Mode Buttons */}
-        {!otherUser && isInEditMode && (
-          <div className="mt-8 flex flex-wrap gap-3 justify-center md:justify-start">
-            <button
-              onClick={submitChanges}
-              className="flex items-center gap-2 px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
-            >
-              <FiCheck /> Save
-            </button>
-            <button
-              onClick={() => setIsInEditMode(false)}
-              className="flex items-center gap-2 px-5- py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
-            >
-              <FiX /> Cancel
-            </button>
-            <button
-              onClick={changeProfilePic}
-              className="flex items-center gap-2 px-5 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition"
-            >
-              <FiCamera /> Upload Photo
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );

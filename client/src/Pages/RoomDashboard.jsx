@@ -3,6 +3,9 @@ import { jwtDecode } from "jwt-decode";
 import { useState } from "react";
 import { FiX } from "react-icons/fi";
 import displayError from "../utils/displayError";
+import { Monitor, Users, Share2, FileText, PenTool, MessageCircle } from "lucide-react";
+import { motion } from "framer-motion";
+
 
 const BASE_URL = import.meta.env.VITE_BASE_URL;
 
@@ -80,6 +83,63 @@ export function RoomDashboard({showAlert}) {
           </button>
         </div>
       </div>
+
+  {/* VIDEO CALL FEATURES SECTION */}
+<div className="max-w-4xl w-full mt-12">
+  <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">
+    Video Call Features
+  </h2>
+
+  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+    {[
+      {
+        title: "Canvas Sharing",
+        description: "Draw, annotate, and share your ideas live with others.",
+        icon: <PenTool className="text-indigo-600 w-8 h-8 mb-3" />,
+      },
+      {
+        title: "Screen Sharing",
+        description: "Share your entire screen or a window seamlessly.",
+        icon: <Monitor className="text-indigo-600 w-8 h-8 mb-3" />,
+      },
+      {
+        title: "Multi-User Calls",
+        description: "Connect with multiple people in a single call.",
+        icon: <Users className="text-indigo-600 w-8 h-8 mb-3" />,
+      },
+      {
+        title: "Friend Invites",
+        description: "Easily invite friends to join your video room.",
+        icon: <Share2 className="text-indigo-600 w-8 h-8 mb-3" />,
+      },
+      {
+        title: "Group Chat",
+        description: "Chat in real-time while staying on call.",
+        icon: <MessageCircle className="text-indigo-600 w-8 h-8 mb-3" />,
+      },
+      {
+        title: "File Sharing",
+        description: "Send and receive files instantly during calls.",
+        icon: <FileText className="text-indigo-600 w-8 h-8 mb-3" />,
+      },
+    ].map((feature, index) => (
+      <motion.div
+        key={index}
+        initial={{ opacity: 0, y: 40 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: index * 0.1, duration: 0.5 }}
+        whileHover={{ scale: 1.05, boxShadow: "0px 6px 20px rgba(0,0,0,0.1)" }}
+        className="bg-white p-6 rounded-xl shadow-md flex flex-col items-start transition-all"
+      >
+        {feature.icon}
+        <h3 className="text-lg font-semibold mb-2 text-indigo-700">{feature.title}</h3>
+        <p className="text-gray-600">{feature.description}</p>
+      </motion.div>
+    ))}
+  </div>
+</div>
+
+
 
       {/* CREATE ROOM MODAL */}
       {createRoomModal && newRoomData && (
