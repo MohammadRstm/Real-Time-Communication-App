@@ -26,9 +26,9 @@ builder.Services.AddSingleton<IMongoDatabase>(s =>
 });
 
 // Register DB Model services
-builder.Services.AddSingleton<UserService>();
-builder.Services.AddSingleton<RoomService>();
-builder.Services.AddSingleton<MessageService>();
+builder.Services.AddScoped<UserService>();
+builder.Services.AddScoped<RoomService>();
+builder.Services.AddScoped<MessageService>();
 
 // Register Token service
 builder.Services.AddSingleton<TokenService>();

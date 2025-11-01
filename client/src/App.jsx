@@ -22,7 +22,7 @@ import ProtectedRoute from './Pages/ProtectedRout';
 // For the website in general : 
 // Create the notifications system -- done
 // Create a Profile page for users -- done
-// Fix the UI/UX design for the Main dashboard -- done
+// Fix the UI design for the Main dashboard -- done
 
 // More features :
 // Add a page where the user can view his friend's list -- done
@@ -32,12 +32,14 @@ import ProtectedRoute from './Pages/ProtectedRout';
 // Add group chat inside video call room -- done
 // Add a custom alert module -- done
 // Video call invites after user creates a room
+// Video call invites before user creates a room
 
 // Logical issues:
 // UI is not being updated after certain events happen , like accepting a friend request or rejecting it -- done 
-// In the group chat of a room we can't see who is sending the messages making it all that confusing
+// In the group chat of a room we can't see who is sending the messages making it all that confusing -- done
 // Advise users to re-login once the token expires instead of showing a server error -- done
 // When all users leave the room, it & all its files must be deleted form the server/db -- done
+// The user can choose to close the room before even entering it, I need to make sure that room is deleted from db if that happens
 
 // Debugging:
 // User names are not appearing in the friend request section or in friends list in friend request/search card -- done
@@ -49,8 +51,8 @@ import ProtectedRoute from './Pages/ProtectedRout';
 // Login -- done
 // Signup -- done
 // Profile -- done
-// VideoCallRoom
-// Room Dashboard
+// VideoCallRoom -- done
+// Room Dashboard -- done
 // Chat Widget component
 // Header -- done
 // Custom Alert component -- done

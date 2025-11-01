@@ -79,9 +79,12 @@ export function VideoCalling() {
   const connectionRef = useRef(null); // SignalR HubConnection
   const groupChatRef = useRef(null); // Group Chat HubConnection
   const canvasDrawingRef = useRef(null);// Canvas Chat HubConnection
+  const messageEndRef = useRef(null);
+  const chatContainerRef = useRef(null);
 
   const [messages , setMessages] = useState([]);
   const [currentUserId , setCurrentUserId] = useState(null);
+
 
   const setRemoteStreamFor = (peerId, stream) => {
     setRemoteStreams((prev) => {
@@ -91,6 +94,13 @@ export function VideoCalling() {
       return next;
     });
   };
+  // Scroll through messages
+  useEffect(() =>{
+    if(messageEndRef.current){
+      messageEndRef.current.scrollIntoView({behavior : "smooth"});
+    }
+  } , [messages]);
+
   // Group chat signalr setup
   useEffect(() =>{
     const token = localStorage.getItem("token");
@@ -792,52 +802,93 @@ export function VideoCalling() {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        <div
+         ref={chatContainerRef}
+         className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-hide">
           {messages.length === 0 ? (
             <p className="text-center text-gray-400 mt-4">No messages yet...</p>
           ) : (          
-          messages.map((m, i) => {
+         messages.map((m, i) => {
             const isMine = m.senderId === currentUserId;
             const isFile =
               m.message.startsWith("http") &&
               /\.(pdf|jpg|jpeg|png|gif|mp4|zip|docx|txt)$/i.test(m.message);
 
-            // Extract filename from URL if it's a file
             const fileName = isFile
-            ? decodeURIComponent(m.message.split("/").pop().replace(/^[\w-]+_[\w-]+_/, ""))
-            : "";
+              ? decodeURIComponent(m.message.split("/").pop().replace(/^[\w-]+_[\w-]+_/, ""))
+              : "";
+
+            const anonymousProfilePicture = "/anonymousProfilePicture.png";
+            const profilePic = m.userProfilePicture
+              ? `${BASE_URL}/uploads/${m.userProfilePicture}`
+              : anonymousProfilePicture;
+
             return (
-              <div key={i} className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
-                <div
-                  className={`px-3 py-2 rounded-lg max-w-[70%] ${
-                    isMine ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-100"
-                  }`}
-                >
-                  {isFile ? (
-                    <a
-                      href={m.message}
-                      download
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 underline hover:text-blue-200"
-                    >
-                      <FileTextIcon className="w-4 h-4" />
-                      <span>{fileName}</span>
-                    </a>
-                  ) : (
-                    <p>{m.message}</p>
+              <div
+                key={i}
+                className={`flex items-end mb-3 ${isMine ? "justify-end" : "justify-start"}`}
+              >
+                {/* Profile pic on left for others */}
+                {!isMine && (
+                  <img
+                    src={profilePic}
+                    alt={`${m.userFullName}'s profile`}
+                    className="w-8 h-8 rounded-full mr-2 object-cover border border-gray-600"
+                  />
+                )}
+
+                <div className={`flex flex-col max-w-[70%] ${isMine ? "items-end" : "items-start"}`}>
+                  {/* Name (only for other users) */}
+                  {!isMine && (
+                    <span className="text-xs text-gray-400 mb-1 ml-1">{m.userFullName}</span>
                   )}
 
-                  <small className="block text-xs opacity-70 mt-1 text-right">
+                  {/* Message bubble */}
+                  <div
+                    className={`px-3 py-2 rounded-2xl shadow-sm break-words ${
+                      isMine
+                        ? "bg-blue-600 text-white rounded-br-none"
+                        : "bg-gray-700 text-gray-100 rounded-bl-none"
+                    }`}
+                  >
+                    {isFile ? (
+                      <a
+                        href={m.message}
+                        download
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 underline hover:text-blue-200"
+                      >
+                        <FileTextIcon className="w-4 h-4" />
+                        <span>{fileName}</span>
+                      </a>
+                    ) : (
+                      <p className="whitespace-pre-wrap">{m.message}</p>
+                    )}
+                  </div>
+
+                  {/* Time below bubble */}
+                  <small className="text-xs opacity-60 mt-1">
                     {new Date(m.sentAt || m.createdAt).toLocaleTimeString([], {
                       hour: "2-digit",
                       minute: "2-digit",
                     })}
                   </small>
                 </div>
+
+                {/* Profile pic on right for your messages */}
+                {isMine && (
+                  <img
+                    src={profilePic}
+                    alt="My profile"
+                    className="w-8 h-8 rounded-full ml-2 object-cover border border-gray-600"
+                  />
+                )}
               </div>
-            )
-          }))}
+            );
+          })
+        )}
+        <div ref={messageEndRef} />
         </div>
 
         <GroupChat

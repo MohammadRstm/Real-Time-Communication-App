@@ -14,7 +14,6 @@ export default function AnimateBackGround() {
 
     let mouse = { x: undefined, y: undefined };
     const numberOfCircles = 150;
-    const colors = ["rgba(255, 255, 255, 0.4)"];
     const circles = [];
 
     function distance(x, y, x2, y2) {
